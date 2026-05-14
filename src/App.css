@@ -1,0 +1,330 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --font-main: 'Plus Jakarta Sans', sans-serif;
+  
+  /* Dark Mode Defaults */
+  --bg-primary: #05070a;
+  --glass-bg: rgba(15, 23, 42, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-blur: blur(30px);
+  --text-primary: #f8fafc;
+  --text-secondary: #94a3b8;
+  --accent-color: #38bdf8;
+  --card-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+  --icon-bg: rgba(255, 255, 255, 0.05);
+  --bg-canvas-filter: blur(0.5px) brightness(0.75);
+}
+
+.app.day {
+  --bg-primary: #f8fafc;
+  --glass-bg: rgba(255, 255, 255, 0.95);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --accent-color: #2563eb;
+  --card-shadow: 0 15px 45px rgba(15, 23, 42, 0.12);
+  --icon-bg: #f1f5f9;
+  --bg-canvas-filter: blur(0.5px) brightness(1.05);
+}
+
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  font-family: var(--font-main);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  overflow: hidden;
+  transition: all 0.5s ease;
+}
+
+#root {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.scroll-container {
+  height: 100vh; 
+  position: relative;
+  width: 100%;
+  overflow-y: auto;
+  scroll-behavior: smooth;
+}
+
+.dashboard-container {
+  min-height: 100vh;
+  padding: 8rem 2rem 5rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  z-index: 1;
+}
+
+/* Fixed Header */
+.header {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 1.2rem 4rem;
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-border);
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  transition: all 0.4s ease;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+}
+
+.title-container h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  letter-spacing: 2px;
+  color: var(--text-primary);
+  text-transform: uppercase;
+}
+
+.header-right {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.theme-toggle {
+  background: var(--icon-bg);
+  border: 1px solid var(--glass-border);
+  padding: 0.8rem;
+  border-radius: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  color: var(--text-primary);
+}
+
+.theme-toggle:hover {
+  transform: translateY(-2px);
+  background: var(--accent-color);
+  color: white;
+  border-color: transparent;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+}
+
+/* Layout */
+.main-content {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 3rem;
+  width: 100%;
+  max-width: 1440px;
+  animation: slideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateY(40px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Cards */
+.glass-card {
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  backdrop-filter: var(--glass-blur);
+  border-radius: 36px;
+  padding: 3rem;
+  box-shadow: var(--card-shadow);
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1);
+  position: relative;
+}
+
+.glass-card:hover {
+  transform: translateY(-10px);
+  border-color: var(--accent-color);
+}
+
+.aqi-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+  justify-content: center;
+}
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 2rem;
+}
+
+/* Typography */
+.card-title {
+  font-size: 0.9rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  margin-bottom: 2rem;
+}
+
+.sensor-card {
+  display: flex;
+  flex-direction: column;
+  padding: 2.5rem;
+}
+
+.sensor-items {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.sensor-item {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.sensor-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: var(--icon-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--glass-border);
+  color: var(--accent-color);
+}
+
+.sensor-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sensor-label {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sensor-value-group {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+}
+
+.sensor-value {
+  font-size: 2.2rem;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.sensor-unit {
+  font-size: 1rem;
+  opacity: 0.6;
+  font-weight: 600;
+}
+
+
+/* AQI Meter Area */
+.aqi-meter-container {
+  width: 100%;
+  max-width: 400px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.aqi-status-badge {
+  padding: 1rem 3.5rem;
+  border-radius: 20px;
+  font-size: 1.1rem;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-top: 2.5rem;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+}
+
+/* Meta */
+.welcome-msg {
+  width: 100%;
+  max-width: 1440px;
+  margin-bottom: 3rem;
+}
+
+.welcome-msg h2 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 0.8rem;
+  letter-spacing: -1px;
+}
+
+.welcome-msg p {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.location-tag {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  line-height: 1.5;
+}
+
+.location-tag span {
+  display: block;
+  font-size: 0.9rem;
+  opacity: 0.7;
+  font-weight: 500;
+}
+
+/* Responsiveness */
+@media (max-width: 1100px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+  .header {
+    padding: 1.2rem 2rem;
+  }
+}
+
+@media (max-width: 600px) {
+  .sensor-grid {
+    grid-template-columns: 1fr;
+  }
+  .welcome-msg h2 {
+    font-size: 2rem;
+  }
+  .header {
+    grid-template-columns: 1fr auto;
+  }
+  .title-container {
+    display: none;
+  }
+}
+
+
+
+
