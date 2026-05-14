@@ -1,5 +1,34 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { 
+  GaugeContainer, 
+  GaugeValueArc, 
+  GaugeReferenceArc, 
+  useGaugeState 
+} from '@mui/x-charts/Gauge';
+
+function GaugePointer() {
+  const { valueAngle, outerRadius, cx, cy } = useGaugeState();
+
+  if (valueAngle === null) {
+    return null;
+  }
+
+  const target = {
+    x: cx + outerRadius * Math.sin(valueAngle),
+    y: cy - outerRadius * Math.cos(valueAngle),
+  };
+  return (
+    <g>
+      <circle cx={cx} cy={cy} r={8} fill="currentColor" />
+      <path
+        d={`M ${cx} ${cy} L ${target.x} ${target.y}`}
+        stroke="currentColor"
+        strokeWidth={4}
+      />
+    </g>
+  );
+}
 
 const AQIMeter = ({ value }) => {
   const getAQIInfo = (val) => {
@@ -12,70 +41,51 @@ const AQIMeter = ({ value }) => {
   };
 
   const { label, color } = getAQIInfo(value);
-  const percentage = Math.min((value / 500) * 100, 100);
-  
-  // High-visibility Circular Parameters
-  const radius = 42;
-  const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (percentage / 100) * circumference;
 
   return (
     <div className="aqi-meter-container">
-      <div style={{ position: 'relative', width: '100%', maxWidth: '340px', aspectRatio: '1/1' }}>
+      <div style={{ position: 'relative', width: '300px', height: '300px' }}>
         {/* Glow Effect Layer */}
         <div style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: '90%',
-          height: '90%',
+          width: '80%',
+          height: '80%',
           borderRadius: '50%',
           background: color,
-          opacity: 0.1,
-          filter: 'blur(40px)',
-          transition: 'all 0.5s ease'
+          opacity: 0.15,
+          filter: 'blur(50px)',
+          transition: 'all 0.5s ease',
+          pointerEvents: 'none'
         }} />
 
-        <svg viewBox="0 0 100 100" style={{ transform: 'rotate(-90deg)', width: '100%', height: '100%' }}>
-          {/* Background Track */}
-          <circle
-            cx="50"
-            cy="50"
-            r={radius}
-            fill="none"
-            stroke="var(--icon-bg)"
-            strokeWidth="12"
-            strokeLinecap="round"
-            opacity="0.5"
-          />
-          
-          {/* Main Progress Arc */}
-          <motion.circle
-            cx="50"
-            cy="50"
-            r={radius}
-            fill="none"
-            stroke={color}
-            strokeWidth="12"
-            strokeLinecap="round"
-            strokeDasharray={circumference}
-            initial={{ strokeDashoffset: circumference }}
-            animate={{ strokeDashoffset: strokeDashoffset }}
-            transition={{ duration: 2, ease: "circOut" }}
-          />
-        </svg>
+        <GaugeContainer
+          width={300}
+          height={300}
+          startAngle={-110}
+          endAngle={110}
+          value={value}
+          min={0}
+          max={500}
+        >
+          <GaugeReferenceArc stroke="rgba(255,255,255,0.08)" strokeWidth={12} />
+          <GaugeValueArc stroke={color} strokeWidth={12} />
+          <GaugePointer />
+        </GaugeContainer>
 
         {/* Central Display */}
         <div style={{
           position: 'absolute',
-          top: '50%',
+          top: '55%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
           textAlign: 'center',
           display: 'flex',
           flexDirection: 'column',
-          justifyContent: 'center'
+          justifyContent: 'center',
+          pointerEvents: 'none'
         }}>
           <span style={{ 
             fontSize: '4.5rem', 
@@ -91,7 +101,8 @@ const AQIMeter = ({ value }) => {
             fontWeight: 700, 
             color: 'var(--text-secondary)',
             letterSpacing: '2px',
-            marginTop: '0.5rem'
+            marginTop: '0.5rem',
+            textTransform: 'uppercase'
           }}>
             AQI INDEX
           </span>

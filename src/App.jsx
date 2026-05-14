@@ -21,19 +21,27 @@ import {
 function App() {
   const [theme, setTheme] = useState('dark');
   const [sensorData, setSensorData] = useState({
-    pm25: 45,
-    pm10: 82,
-    co: 1.2,
-    nh3: 12,
-    temp: 28,
-    humidity: 65,
-    aqi: 95
+    pm25: 0,
+    pm10: 0,
+    co: 0,
+    nh3: 0,
+    temp: 0,
+    humidity: 0,
+    aqi: 0
   });
 
   useEffect(() => {
     const unsubscribe = subscribeToSensorData((data) => {
-      const aqi = calculateAQI(data.pm25, data.pm10);
-      setSensorData({ ...data, aqi });
+      const aqi = calculateAQI(data.pm25 || 0, data.pm10 || 0);
+      setSensorData({ 
+        pm25: data.pm25 || 0,
+        pm10: data.pm10 || 0,
+        co: data.co || 0,
+        nh3: data.nh3 || 0,
+        temp: data.temp || 0,
+        humidity: data.humidity || 0,
+        aqi 
+      });
     });
 
     return () => unsubscribe && unsubscribe();
@@ -97,36 +105,36 @@ function App() {
             {/* Detailed Sensor Grid */}
             <div className="sensor-grid">
               <SensorCard 
-                title="PMS7003 Core"
+                title="Pollution"
                 icon={Layers}
                 metrics={[
-                  { icon: Activity, label: "PM 2.5", value: sensorData.pm25, unit: "µg/m³", color: "#38bdf8" },
-                  { icon: Wind, label: "PM 10", value: sensorData.pm10, unit: "µg/m³", color: "#10b981" }
+                  { icon: Activity, label: "PM 2.5", value: sensorData.pm25, unit: "µg/m³", color: "#38bdf8", min: 0, max: 200 },
+                  { icon: Wind, label: "PM 10", value: sensorData.pm10, unit: "µg/m³", color: "#10b981", min: 0, max: 200 }
                 ]}
               />
 
               <SensorCard 
-                title="DHT22 Atmosphere"
+                title="Atmosphere"
                 icon={Waves}
                 metrics={[
-                  { icon: Thermometer, label: "Temperature", value: sensorData.temp, unit: "°C", color: "#f59e0b" },
-                  { icon: Droplets, label: "Humidity", value: sensorData.humidity, unit: "%", color: "#6366f1" }
+                  { icon: Thermometer, label: "Temp", value: sensorData.temp, unit: "°C", color: "#f59e0b", min: 0, max: 50 },
+                  { icon: Droplets, label: "Humidity", value: sensorData.humidity, unit: "%", color: "#6366f1", min: 0, max: 100 }
                 ]}
               />
 
               <SensorCard 
-                title="MQ135 Toxins"
+                title="Toxins"
                 icon={Cpu}
                 metrics={[
-                  { icon: CloudRain, label: "NH3 / Pollutants", value: sensorData.nh3, unit: "ppm", color: "#ef4444" }
+                  { icon: CloudRain, label: "NH3 / Pollutants", value: sensorData.nh3, unit: "ppm", color: "#ef4444", min: 0, max: 500 }
                 ]}
               />
 
               <SensorCard 
-                title="MQ7 Carbon"
+                title="Carbon Monoxide"
                 icon={Zap}
                 metrics={[
-                  { icon: Zap, label: "CO Concentration", value: sensorData.co, unit: "ppm", color: "#facc15" }
+                  { icon: Zap, label: "CO Level", value: sensorData.co, unit: "ppm", color: "#facc15", min: 0, max: 100 }
                 ]}
               />
             </div>

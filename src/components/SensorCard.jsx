@@ -18,7 +18,7 @@ const SensorCard = ({ title, icon: TitleIcon, metrics }) => {
         {metrics.map((metric, index) => (
           <div key={index} className="sensor-item">
             <div className="sensor-icon" style={{ color: metric.color }}>
-              <metric.icon size={22} />
+              <metric.icon size={32} />
             </div>
             <div className="sensor-info">
               <span className="sensor-label">{metric.label}</span>
