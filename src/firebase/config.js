@@ -3,13 +3,14 @@ import { getDatabase, ref, onValue } from 'firebase/database';
 
 // TODO: Replace with your actual Firebase config from the Firebase Console
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyDjE8Omi0Ghqt-393nshqcHpdyNQ-7UhgI",
+  authDomain: "practive-b6bbc.firebaseapp.com",
+  databaseURL: "https://practive-b6bbc-default-rtdb.firebaseio.com",
+  projectId: "practive-b6bbc",
+  storageBucket: "practive-b6bbc.firebasestorage.app",
+  messagingSenderId: "356723227013",
+  appId: "1:356723227013:web:ba4567d44f27cb2875ecec",
+  measurementId: "G-XYJNVBC9SB"
 };
 
 const app = initializeApp(firebaseConfig);

@@ -7,8 +7,8 @@
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 
 // Firebase credentials
-#define FIREBASE_HOST "YOUR_FIREBASE_PROJECT_ID.firebaseio.com"
-#define FIREBASE_AUTH "YOUR_FIREBASE_DATABASE_SECRET"
+#define FIREBASE_HOST "practive-b6bbc-default-rtdb.firebaseio.com"
+#define FIREBASE_AUTH "YOUR_DATABASE_SECRET" // Legacy secret or service account
 
 FirebaseData firebaseData;
 
