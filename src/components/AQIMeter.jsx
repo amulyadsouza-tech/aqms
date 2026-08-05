@@ -18,13 +18,15 @@ function GaugePointer() {
     x: cx + outerRadius * Math.sin(valueAngle),
     y: cy - outerRadius * Math.cos(valueAngle),
   };
+  
   return (
     <g>
-      <circle cx={cx} cy={cy} r={8} fill="currentColor" />
+      <circle cx={cx} cy={cy} r={6} fill="#0f172a" />
       <path
         d={`M ${cx} ${cy} L ${target.x} ${target.y}`}
-        stroke="currentColor"
-        strokeWidth={4}
+        stroke="#0f172a"
+        strokeWidth={3}
+        strokeLinecap="round"
       />
     </g>
   );
@@ -32,101 +34,82 @@ function GaugePointer() {
 
 const AQIMeter = ({ value }) => {
   const getAQIInfo = (val) => {
-    if (val <= 50) return { label: 'Excellent', color: '#10b981' };
-    if (val <= 100) return { label: 'Good', color: '#22c55e' };
-    if (val <= 200) return { label: 'Moderate', color: '#f59e0b' };
-    if (val <= 300) return { label: 'Poor', color: '#f97316' };
-    if (val <= 400) return { label: 'Very Poor', color: '#ef4444' };
-    return { label: 'Severe', color: '#7f1d1d' };
+    if (val <= 50) return { label: 'Excellent', color: '#10b981', desc: 'Air quality is satisfactory, and air pollution poses little or no risk.', advice: 'Perfect day for outdoor exercises and campus walks!' };
+    if (val <= 100) return { label: 'Good', color: '#22c55e', desc: 'Air quality is acceptable; however, there may be some risk for sensitive people.', advice: 'Great day to enjoy outdoor activities.' };
+    if (val <= 200) return { label: 'Moderate', color: '#f59e0b', desc: 'Members of sensitive groups may experience health effects.', advice: 'Sensitive individuals should reduce heavy outdoor work.' };
+    if (val <= 300) return { label: 'Poor', color: '#f97316', desc: 'Everyone may begin to experience health effects.', advice: 'Consider wearing masks and close classroom windows.' };
+    if (val <= 400) return { label: 'Very Poor', color: '#ef4444', desc: 'Health alert: everyone may experience more serious health effects.', advice: 'Limit outdoor exposure. Academic block ventilation active.' };
+    return { label: 'Severe', color: '#7f1d1d', desc: 'Health warning of emergency conditions: everyone is more likely to be affected.', advice: 'Avoid outdoor activities. High-efficiency filtration on.' };
   };
 
-  const { label, color } = getAQIInfo(value);
+  const { label, color, desc, advice } = getAQIInfo(value);
 
   return (
-    <div className="aqi-meter-container">
-      <div style={{ position: 'relative', width: '300px', height: '300px' }}>
-        {/* Glow Effect Layer */}
+    <div className="aqi-gauge-card" style={{ width: '100%', height: '100%' }}>
+      <div className="card-header-actions" style={{ width: '100%', marginBottom: '1rem' }}>
+        <h4 className="card-title">Atmospheric Health (AQI)</h4>
+      </div>
+      
+      <div className="aqi-meter-wrapper">
+        {/* Soft colored glow background behind the gauge */}
         <div style={{
           position: 'absolute',
           top: '50%',
           left: '50%',
           transform: 'translate(-50%, -50%)',
-          width: '80%',
-          height: '80%',
+          width: '75%',
+          height: '75%',
           borderRadius: '50%',
-          background: color,
-          opacity: 0.15,
-          filter: 'blur(50px)',
+          backgroundColor: color,
+          opacity: 0.08,
+          filter: 'blur(35px)',
           transition: 'all 0.5s ease',
           pointerEvents: 'none'
         }} />
 
         <GaugeContainer
-          width={300}
-          height={300}
+          width={220}
+          height={220}
           startAngle={-110}
           endAngle={110}
           value={value}
           min={0}
           max={500}
         >
-          <GaugeReferenceArc stroke="rgba(255,255,255,0.08)" strokeWidth={12} />
-          <GaugeValueArc stroke={color} strokeWidth={12} />
+          <GaugeReferenceArc stroke="#f1f5f9" strokeWidth={14} />
+          <GaugeValueArc stroke={color} strokeWidth={14} />
           <GaugePointer />
         </GaugeContainer>
 
-        {/* Central Display */}
-        <div style={{
-          position: 'absolute',
-          top: '55%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          justifyContent: 'center',
-          pointerEvents: 'none'
-        }}>
-          <span style={{ 
-            fontSize: '4.5rem', 
-            fontWeight: 800, 
-            color: 'var(--text-primary)',
-            lineHeight: 1,
-            letterSpacing: '-2px'
-          }}>
-            {Math.round(value)}
-          </span>
-          <span style={{ 
-            fontSize: '0.9rem', 
-            fontWeight: 700, 
-            color: 'var(--text-secondary)',
-            letterSpacing: '2px',
-            marginTop: '0.5rem',
-            textTransform: 'uppercase'
-          }}>
-            AQI INDEX
-          </span>
+        {/* Central Metric Value */}
+        <div className="aqi-gauge-center">
+          <span className="aqi-gauge-value">{Math.round(value)}</span>
+          <span className="aqi-gauge-label">AQI INDEX</span>
         </div>
       </div>
       
       {/* Dynamic Status Badge */}
       <motion.div 
-        className="aqi-status-badge"
+        className="aqi-card-badge"
         style={{ 
-          backgroundColor: color, 
-          color: '#fff',
+          backgroundColor: color,
+          boxShadow: `0 4px 12px ${color}35`
         }}
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        key={label}
       >
         {label}
       </motion.div>
+
+      {/* Humanized Health & Safety Box */}
+      <div className="aqi-recommendation-box">
+        <h4>{desc}</h4>
+        <p>{advice}</p>
+      </div>
     </div>
   );
 };
 
 export default AQIMeter;
-
-
-
