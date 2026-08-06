@@ -14,11 +14,13 @@
     "@emotion/styled": "^11.14.1",
     "@mui/material": "^9.0.1",
     "@mui/x-charts": "^9.2.0",
+    "@react-three/fiber": "^9.7.0",
     "firebase": "^12.13.0",
     "framer-motion": "^12.38.0",
     "lucide-react": "^1.14.0",
     "react": "^19.2.6",
-    "react-dom": "^19.2.6"
+    "react-dom": "^19.2.6",
+    "three": "^0.185.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
