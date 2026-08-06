@@ -247,28 +247,6 @@ void loop() {
 
   return (
     <div className="dashboard-layout">
-      {/* Silk Animated Background */}
-      <div style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 0,
-        pointerEvents: 'none'
-      }}>
-        <Silk
-          speed={3}
-          scale={1.2}
-          color="#c8d8f0"
-          noiseIntensity={1.2}
-          rotation={0.1}
-        />
-        {/* Soft overlay to keep UI readable */}
-        <div style={{
-          position: 'absolute',
-          inset: 0,
-          background: 'rgba(248,250,252,0.72)',
-          backdropFilter: 'blur(1px)'
-        }} />
-      </div>
       {/* Sidebar Navigation */}
       <aside className="sidebar">
         <div>
@@ -331,7 +309,29 @@ void loop() {
       </aside>
 
       {/* Main Wrapper */}
-      <div className="main-wrapper">
+      <div className="main-wrapper" style={{ position: 'relative' }}>
+        {/* Silk Animated Background - inside main area only */}
+        <div style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: 0,
+          pointerEvents: 'none',
+          overflow: 'hidden'
+        }}>
+          <Silk
+            speed={3}
+            scale={1.2}
+            color="#c8d8f0"
+            noiseIntensity={1.2}
+            rotation={0.1}
+            style={{ pointerEvents: 'none' }}
+          />
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(248,250,252,0.78)'
+          }} />
+        </div>
         <header className="top-header">
           <div className="search-bar" style={{ position: 'relative' }}>
             <Search size={18} className="text-muted" />
