@@ -1,0 +1,108 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "SJEC_AQMS_Device_Telemetry_Payload",
+  "description": "Standardized JSON telemetry payload format transmitted by the SJEC AQMS sensing node to the authenticated ingestion endpoint.",
+  "type": "object",
+  "required": ["deviceId", "timestamp", "firmwareVersion", "sensors", "gps", "connectivity"],
+  "properties": {
+    "deviceId": {
+      "type": "string",
+      "example": "SJEC-AQMS-ESP32-001"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Unix epoch milliseconds sampled by onboard RTC or NTP. Set to 0 if no time sync exists.",
+      "example": 1728841200000
+    },
+    "firmwareVersion": {
+      "type": "string",
+      "example": "0.1.0"
+    },
+    "sensors": {
+      "type": "object",
+      "required": ["pm1_0", "pm2_5", "pm10", "mq3_raw", "temperature_c", "humidity_percent"],
+      "properties": {
+        "pm1_0": {
+          "type": ["number", "null"],
+          "description": "Particulate matter PM1.0 concentration in ug/m3. Null if sensor disconnected.",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "pm2_5": {
+          "type": ["number", "null"],
+          "description": "Particulate matter PM2.5 concentration in ug/m3. Null if sensor disconnected.",
+          "minimum": 0,
+          "maximum": 1000
+        },
+        "pm10": {
+          "type": ["number", "null"],
+          "description": "Particulate matter PM10 concentration in ug/m3. Null if sensor disconnected.",
+          "minimum": 0,
+          "maximum": 1500
+        },
+        "mq3_raw": {
+          "type": ["integer", "null"],
+          "description": "Raw 12-bit ADC voltage reading (0-4095) from MQ-3 analog pin. Uncalibrated count.",
+          "minimum": 0,
+          "maximum": 4095
+        },
+        "temperature_c": {
+          "type": ["number", "null"],
+          "description": "Ambient temperature in degrees Celsius.",
+          "minimum": -40.0,
+          "maximum": 85.0
+        },
+        "humidity_percent": {
+          "type": ["number", "null"],
+          "description": "Relative humidity in percentage (0-100%).",
+          "minimum": 0.0,
+          "maximum": 100.0
+        }
+      }
+    },
+    "gps": {
+      "type": "object",
+      "required": ["latitude", "longitude", "valid"],
+      "properties": {
+        "latitude": {
+          "type": ["number", "null"],
+          "minimum": -90.0,
+          "maximum": 90.0
+        },
+        "longitude": {
+          "type": ["number", "null"],
+          "minimum": -180.0,
+          "maximum": 180.0
+        },
+        "valid": {
+          "type": "boolean",
+          "description": "True only if GPS module has acquired a valid 2D/3D ephemeris fix."
+        },
+        "altitude_m": {
+          "type": ["number", "null"]
+        },
+        "satellites": {
+          "type": ["integer", "null"]
+        }
+      }
+    },
+    "connectivity": {
+      "type": "object",
+      "required": ["transport", "rssi_dbm", "snr_db"],
+      "properties": {
+        "transport": {
+          "type": "string",
+          "enum": ["wifi", "lora_gateway", "cellular", "other"]
+        },
+        "rssi_dbm": {
+          "type": ["integer", "null"],
+          "description": "Received signal strength in dBm."
+        },
+        "snr_db": {
+          "type": ["number", "null"],
+          "description": "Signal to noise ratio in dB (relevant for LoRa modules)."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "rules": {
+    "config": {
+      "branding": {
+        ".read": true,
+        ".write": "auth != null"
+      },
+      "sensors": {
+        ".read": true,
+        ".write": "auth != null"
+      },
+      "aqi": {
+        ".read": true,
+        ".write": "auth != null"
+      },
+      "site": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    },
+    "devices": {
+      "$deviceId": {
+        "metadata": {
+          ".read": true,
+          ".write": "auth != null"
+        },
+        "status": {
+          ".read": true,
+          ".write": "auth != null"
+        },
+        "latest": {
+          ".read": true,
+          ".write": "auth != null"
+        },
+        "history": {
+          ".read": true,
+          ".write": "auth != null",
+          ".indexOn": ["timestamp"]
+        }
+      }
+    },
+    "public": {
+      "dashboard": {
+        ".read": true,
+        ".write": "auth != null"
+      }
+    }
+  }
+}

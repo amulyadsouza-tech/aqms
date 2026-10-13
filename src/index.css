@@ -1,27 +1,327 @@
-/* Simple reset to ensure the cinematic dashboard has full control */
-:root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-  color-scheme: light dark;
-  background-color: transparent;
+@layer base {
+  body {
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  code, pre, .font-mono {
+    font-family: 'JetBrains Mono', Menlo, Consolas, Monaco, 'Courier New', monospace;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    overflow-y: scroll;
+  }
+
+  :root {
+    --page-bg: #e8f4fd;
+    --card-bg: #EAF3FC;
+    --card-bg-solid: #ffffff;
+    --card-alt-bg: #ffffff;
+    --card-border: #d1e6f5;
+    --text-primary: #24272D;
+    --text-secondary: #687583;
+    --text-muted: #8c9ba8;
+    --border-color: #d1e6f5;
+    --accent-blue: #397FC0;
+    --input-bg: #ffffff;
+    --input-border: #cbd5e1;
+  }
+
+  .dark {
+    --page-bg: #0A0A0A;
+    --card-bg: #151515;
+    --card-bg-solid: #151515;
+    --card-alt-bg: #1D1D1D;
+    --card-border: #303030;
+    --text-primary: #FFFFFF;
+    --text-secondary: #C4C4C4;
+    --text-muted: #A0A0A0;
+    --border-color: #303030;
+    --accent-blue: #64B5F6;
+    --input-bg: #1D1D1D;
+    --input-border: #303030;
+  }
 }
 
-body {
-  margin: 0;
-  display: flex;
-  min-width: 320px;
-  min-height: 100vh;
+@layer components {
+  /* ── Public dashboard cards ── */
+  .card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-primary);
+    @apply rounded-2xl shadow-card transition-shadow duration-200;
+  }
+
+  .card:hover {
+    @apply shadow-card-hover;
+  }
+
+  /* Solid white / dark charcoal card */
+  .card-solid {
+    background-color: var(--card-bg-solid);
+    border: 1px solid var(--card-border);
+    color: var(--text-primary);
+    @apply rounded-2xl shadow-card;
+  }
+
+  /* Pale blue tinted / secondary card */
+  .card-alt {
+    background-color: var(--card-alt-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-primary);
+    @apply rounded-2xl shadow-card;
+  }
+
+  /* ── Section heading ───────────────────────────────────── */
+  .section-label {
+    @apply text-xs font-bold uppercase tracking-widest text-[#397FC0] dark:text-[#64B5F6];
+  }
+
+  .section-title {
+    @apply text-2xl font-bold text-[#24272D] dark:text-white tracking-tight;
+  }
+
+  /* ── Metric value ──────────────────────────────────────── */
+  .metric-value {
+    @apply text-4xl sm:text-5xl font-extrabold tracking-tight text-[#24272D] dark:text-white;
+  }
+
+  .metric-unit {
+    @apply text-sm sm:text-base font-semibold text-[#687583] dark:text-[#C4C4C4] ml-1.5;
+  }
+
+  /* ── Status badge ──────────────────────────────────────── */
+  .badge-live {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300
+           border border-emerald-300 dark:border-emerald-800/80;
+  }
+
+  .badge-stale {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300
+           border border-amber-300 dark:border-amber-800/80;
+  }
+
+  .badge-offline {
+    @apply inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+           bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300
+           border border-red-300 dark:border-red-800/80;
+  }
+
+  /* ── Button base ───────────────────────────────────────── */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold
+           bg-institute-blue text-white hover:bg-institute-accent
+           transition-colors duration-150 shadow-sm;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-medium
+           text-[#687583] dark:text-[#C4C4C4]
+           hover:bg-sky-100/60 dark:hover:bg-[#1D1D1D] hover:text-[#24272D] dark:hover:text-white
+           transition-colors duration-150;
+  }
+
+  /* ── Tab selector ──────────────────────────────────────── */
+  .tab-active {
+    @apply bg-white dark:bg-[#1D1D1D] text-[#24272D] dark:text-white shadow-sm font-semibold;
+  }
+
+  .tab-inactive {
+    @apply text-[#687583] dark:text-[#A0A0A0] hover:text-[#24272D] dark:hover:text-white font-medium;
+  }
+
+  /* ── Admin panel enlarged typography targets ───────────── */
+  .admin-heading {
+    @apply text-3xl sm:text-4xl font-bold text-[#24272D] dark:text-white tracking-tight;
+  }
+
+  .admin-section-heading {
+    @apply text-2xl font-bold text-[#24272D] dark:text-white;
+  }
+
+  .admin-card-heading {
+    @apply text-xl font-bold text-[#24272D] dark:text-white;
+  }
+
+  .admin-body-text {
+    @apply text-base text-[#24272D] dark:text-[#C4C4C4] leading-relaxed;
+  }
+
+  .admin-label {
+    @apply text-base font-semibold text-[#24272D] dark:text-[#C4C4C4];
+  }
+
+  .admin-helper {
+    @apply text-sm text-[#687583] dark:text-[#A0A0A0];
+  }
+
+  .admin-input {
+    @apply w-full px-4 py-3 text-base rounded-xl border border-slate-300 dark:border-[#303030]
+           bg-white dark:bg-[#1D1D1D] text-[#24272D] dark:text-white
+           placeholder-slate-400 dark:placeholder-slate-500
+           focus:outline-none focus:ring-2 focus:ring-[#397FC0] dark:focus:ring-[#64B5F6] focus:border-transparent
+           transition-colors;
+  }
+
+  .admin-card {
+    @apply bg-white dark:bg-[#151515] rounded-2xl border border-slate-200 dark:border-[#303030] shadow-sm p-6 sm:p-7;
+  }
+
+  .admin-btn-primary {
+    @apply inline-flex items-center gap-2 px-5 py-3 rounded-xl text-base font-semibold
+           bg-institute-blue text-white hover:bg-institute-accent
+           transition-colors duration-150 shadow-sm cursor-pointer;
+  }
+
+  .admin-btn-secondary {
+    @apply inline-flex items-center gap-2 px-5 py-3 rounded-xl text-base font-semibold
+           bg-slate-100 dark:bg-[#1D1D1D] text-[#24272D] dark:text-[#C4C4C4]
+           hover:bg-slate-200 dark:hover:bg-[#252525]
+           border border-slate-300 dark:border-[#303030]
+           transition-colors duration-150 cursor-pointer;
+  }
+
+  .admin-nav-item {
+    @apply w-full flex items-center gap-3 px-4 py-3 text-base font-medium rounded-xl transition-all cursor-pointer;
+  }
+
+  .admin-nav-active {
+    @apply bg-institute-blue text-white shadow-sm font-semibold;
+  }
+
+  .admin-nav-inactive {
+    @apply text-[#687583] dark:text-[#A0A0A0] hover:bg-slate-100 dark:hover:bg-[#1D1D1D] hover:text-[#24272D] dark:hover:text-white;
+  }
+
+  /* ── Dashboard metric card (public) ───────────────────── */
+  .metric-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    color: var(--text-primary);
+    @apply rounded-2xl shadow-card transition-shadow duration-200;
+  }
+
+  .metric-card-inner {
+    @apply p-6 sm:p-7 flex flex-col h-full;
+  }
+}
+
+@layer utilities {
+  .bg-page-light {
+    background-color: #e8f4fd;
+  }
+
+  .bg-page-dark {
+    background-color: #0A0A0A;
+  }
+
+  /* Gentle horizontal scroll for mobile tab bars */
+  .tabs-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tabs-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Fade-in animation */
+  .animate-fade-in {
+    animation: fadeIn 0.35s ease-out;
+  }
+
+  /* Card with reference styling */
+  .card-dashboard {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-radius: 1rem;
+    box-shadow: 0 1px 4px 0 rgba(15, 58, 104, 0.07), 0 4px 16px 0 rgba(15, 58, 104, 0.05);
+  }
+}
+
+/* ── Custom Scrollbars ─────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
   background: transparent;
 }
 
-#root {
-  width: 100%;
-  margin: 0 auto;
+::-webkit-scrollbar-thumb {
+  background: #bae6fd;
+  border-radius: 6px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #303030;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #7dd3fc;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #444444;
+}
+
+/* ── AQI Gauge SVG ─────────────────────────────────────────── */
+.gauge-track {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.gauge-fill {
+  fill: none;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.8s cubic-bezier(0.4, 0, 0.2, 1),
+              stroke 0.5s ease;
+}
+
+/* ── Focus visible ring ────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid #397FC0;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.dark :focus-visible {
+  outline: 2px solid #64B5F6;
+}
+
+/* ── Selection ─────────────────────────────────────────────── */
+::selection {
+  background-color: #bae6fd;
+  color: #0c4a6e;
+}
+
+.dark ::selection {
+  background-color: #303030;
+  color: #ffffff;
+}
+
+/* ── Keyframes ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Pulse animation for status dot ───────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
