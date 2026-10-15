@@ -65,9 +65,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.error('Firebase Auth Login Error:', err);
         let msg = 'Failed to sign in. Please verify your email and password.';
         if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-          msg = 'Invalid administrative credentials. Access restricted.';
+          msg = 'Firebase rejected this sign-in. Confirm the user exists in Firebase Authentication for project aqms-cdc39 and use the password set for that account. Demo credentials do not work while Firebase is configured.';
         } else if (err.code === 'auth/too-many-requests') {
           msg = 'Access temporarily disabled due to many failed login attempts. Try again later.';
+        } else if (err.code === 'auth/operation-not-allowed') {
+          msg = 'Email/Password sign-in is disabled for this Firebase project. Enable it in Firebase Console > Authentication > Sign-in method.';
+        } else if (err.code === 'auth/invalid-api-key') {
+          msg = 'Firebase rejected the configured API key. Check the web app configuration in this project.';
+        } else if (err.code === 'auth/network-request-failed') {
+          msg = 'Could not reach Firebase Authentication. Check the network connection and try again.';
         }
         setError(msg);
         throw new Error(msg);

@@ -27,7 +27,7 @@ export const Header: React.FC<HeaderProps> = ({
   const showOnlineIndicator = !isDemoMode;
 
   return (
-    <header className="sticky top-0 z-40 w-full bg-white/95 dark:bg-[#151515] backdrop-blur-md border-b border-[#d1e6f5] dark:border-[#303030] transition-colors shadow-sm">
+    <header className="sticky top-0 z-50 w-full bg-white/95 dark:bg-[#151515]/95 backdrop-blur-md border-b border-[#d1e6f5] dark:border-[#303030] transition-colors shadow-sm transform-gpu will-change-transform">
       <div className="max-w-[1240px] mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-18 sm:h-20">
 
@@ -39,18 +39,15 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {/* Logo container supporting SVG or PNG */}
             <div className="flex-shrink-0 w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white dark:bg-[#1D1D1D] border-2 border-sky-200 dark:border-[#303030] flex items-center justify-center overflow-hidden shadow-sm transition-all group-hover:border-[#397FC0] dark:group-hover:border-[#64B5F6]">
-              {branding.logoUrl ? (
-                <img
-                  src={branding.logoUrl}
-                  alt="SJEC Logo"
-                  className="w-full h-full object-contain p-1"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center text-institute-blue dark:text-[#64B5F6]">
-                  <School className="w-6 h-6" />
-                  <span className="text-[9px] font-black tracking-tighter leading-none mt-0.5">SJEC</span>
-                </div>
-              )}
+              <img
+                src={branding.logoUrl || '/sjec-logo.png'}
+                alt="SJEC Logo"
+                className="w-full h-full object-contain p-1"
+                onError={(e) => {
+                  // Fallback in case of broken link
+                  e.currentTarget.src = '/sjec-logo.png';
+                }}
+              />
             </div>
 
             {/* Title block */}

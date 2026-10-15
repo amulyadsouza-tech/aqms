@@ -8,16 +8,13 @@ import {
 import {
   DEFAULT_BRANDING,
   DEFAULT_SYSTEM_SETTINGS,
-  fetchHistoricalReadings,
   isFirebaseConfigured,
   subscribeToBranding,
   subscribeToDeviceMetadata,
-  subscribeToLatestReading
+  subscribeToLatestReading,
+  subscribeToActiveDeviceId,
+  subscribeToHistoricalReadings
 } from '../services/firebase';
-import {
-  generateDemoHistoricalData,
-  generateDemoReading
-} from '../services/demoData';
 import { calculateCPCB_AQI } from '../utils/aqiCalculator';
 import { Header } from '../components/common/Header';
 import { Footer } from '../components/common/Footer';
@@ -43,105 +40,110 @@ const getSensorStatus = (
   isStale: boolean
 ): SensorCardStatus => {
   if (isOffline) return 'offline';
-  if (isStale)   return 'stale';
+  if (isStale) return 'stale';
   if (val === null || val === undefined) return 'unavailable';
   if (isNaN(val)) return 'invalid';
   return 'live';
 };
 
 export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin }) => {
-  // ── State ──────────────────────────────────────────────────
-  const [branding, setBranding]           = useState<BrandingConfig>(DEFAULT_BRANDING);
-  const [metadata, setMetadata]           = useState<DeviceMetadata | null>(null);
+  const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
+  const [metadata, setMetadata] = useState<DeviceMetadata | null>(null);
   const [latestReading, setLatestReading] = useState<IngestedReading | null>(null);
   const [historicalData, setHistoricalData] = useState<IngestedReading[]>([]);
   const [timeWindowHours, setTimeWindowHours] = useState<number>(24);
   const [isLoadingHistory, setIsLoadingHistory] = useState<boolean>(true);
-  const [activeDeviceId] = useState<string>('SJEC-AQMS-ESP32-001');
-  const [isDemoMode, setIsDemoMode] = useState<boolean>(!isFirebaseConfigured);
+  const [activeDeviceId, setActiveDeviceId] = useState<string>('');
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [now, setNow] = useState<number>(Date.now());
 
-  // ── Firebase subscriptions ──────────────────────────────────
   useEffect(() => {
-    const unsub = subscribeToBranding(setBranding);
-    return () => unsub();
+    const unsubscribe = subscribeToBranding(setBranding);
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    if (!isDemoMode && isFirebaseConfigured) {
-      const unsubMeta    = subscribeToDeviceMetadata(activeDeviceId, setMetadata);
-      const unsubReading = subscribeToLatestReading(activeDeviceId, setLatestReading);
-      return () => { unsubMeta(); unsubReading(); };
-    } else {
-      const demoReading = generateDemoReading();
-      setLatestReading(demoReading);
-      const timer = setInterval(() => setLatestReading(generateDemoReading()), 10_000);
-      return () => clearInterval(timer);
-    }
-  }, [isDemoMode, activeDeviceId]);
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToActiveDeviceId((deviceId) => {
+      setActiveDeviceId(deviceId || '');
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    setMetadata(null);
+    setLatestReading(null);
+    if (!activeDeviceId || !isFirebaseConfigured) return;
+
+    const unsubscribeMetadata = subscribeToDeviceMetadata(activeDeviceId, setMetadata);
+    const unsubscribeLatest = subscribeToLatestReading(activeDeviceId, setLatestReading);
+    return () => {
+      unsubscribeMetadata();
+      unsubscribeLatest();
+    };
+  }, [activeDeviceId]);
 
   useEffect(() => {
     setIsLoadingHistory(true);
-    if (!isDemoMode && isFirebaseConfigured) {
-      const count = timeWindowHours <= 1 ? 30 : timeWindowHours <= 6 ? 90 : 200;
-      fetchHistoricalReadings(activeDeviceId, count)
-        .then(setHistoricalData)
-        .catch(err => console.error('Failed to load history:', err))
-        .finally(() => setIsLoadingHistory(false));
-    } else {
-      setTimeout(() => {
-        setHistoricalData(generateDemoHistoricalData(timeWindowHours));
-        setIsLoadingHistory(false);
-      }, 250);
+    if (!activeDeviceId || !isFirebaseConfigured) {
+      setHistoricalData([]);
+      setIsLoadingHistory(false);
+      return;
     }
-  }, [isDemoMode, activeDeviceId, timeWindowHours]);
 
-  // ── Derived state ───────────────────────────────────────────
-  const now = Date.now();
-  const offlineTimeout  = metadata?.offlineTimeoutSeconds || DEFAULT_SYSTEM_SETTINGS.deviceOfflineTimeoutSeconds;
-  const staleThreshold  = DEFAULT_SYSTEM_SETTINGS.staleDataThresholdSeconds;
+    const limitCount = timeWindowHours <= 1 ? 30 : timeWindowHours <= 6 ? 90 : 200;
+    return subscribeToHistoricalReadings(
+      activeDeviceId,
+      limitCount,
+      (readings) => {
+        setHistoricalData(readings);
+        setIsLoadingHistory(false);
+      },
+      (error) => {
+        console.error('Failed to subscribe to history:', error);
+        setHistoricalData([]);
+        setIsLoadingHistory(false);
+      }
+    );
+  }, [activeDeviceId, timeWindowHours]);
 
-  const readingAgeSec = latestReading?.timestamp
-    ? Math.max(0, Math.floor((now - latestReading.timestamp) / 1000))
+  const offlineTimeout = metadata?.offlineTimeoutSeconds || DEFAULT_SYSTEM_SETTINGS.deviceOfflineTimeoutSeconds;
+  const staleThreshold = DEFAULT_SYSTEM_SETTINGS.staleDataThresholdSeconds;
+  const dashboardReading = latestReading?.source === 'manual' ? null : latestReading;
+  const readingAgeSec = dashboardReading?.timestamp
+    ? Math.max(0, Math.floor((now - dashboardReading.timestamp) / 1000))
     : Infinity;
-
-  const isDeviceOnline  = Boolean(latestReading && readingAgeSec <= offlineTimeout);
-  const isDataStale     = Boolean(latestReading && readingAgeSec > staleThreshold && readingAgeSec <= offlineTimeout);
-  const isDeviceOffline = Boolean(!latestReading || readingAgeSec > offlineTimeout);
-
-  const s = latestReading?.sensors;
-  const g = latestReading?.gps;
-
-  const ss = (val: number | null | undefined) =>
-    getSensorStatus(val, isDeviceOffline, isDataStale);
+  const isDeviceOnline = Boolean(dashboardReading && readingAgeSec <= offlineTimeout);
+  const isDataStale = Boolean(dashboardReading && readingAgeSec > staleThreshold && readingAgeSec <= offlineTimeout);
+  const isDeviceOffline = Boolean(!dashboardReading || readingAgeSec > offlineTimeout);
+  const sensors = dashboardReading?.sensors;
+  const gps = dashboardReading?.gps;
+  const sensorStatus = (value: number | null | undefined) =>
+    getSensorStatus(value, isDeviceOffline, isDataStale);
 
   const aqiResult = useMemo(
-    () => calculateCPCB_AQI(latestReading?.sensors, isDataStale || isDeviceOffline),
-    [latestReading?.sensors, isDataStale, isDeviceOffline]
+    () => calculateCPCB_AQI(dashboardReading?.sensors, isDataStale || isDeviceOffline),
+    [dashboardReading?.sensors, isDataStale, isDeviceOffline]
   );
 
-  // ── Render ──────────────────────────────────────────────────
   return (
-    <div className="min-h-screen flex flex-col relative overflow-x-hidden bg-transparent text-[#24272D] dark:text-white">
-
-      {/* Header */}
-      <div className="relative z-40">
-        <Header
-          branding={branding}
-          isDemoMode={isDemoMode}
-          isDeviceOnline={isDeviceOnline}
-          onNavigateAdmin={onNavigateAdmin}
-          onNavigateHome={() => {}}
-          currentPage="public"
-        />
-      </div>
+    <div className="min-h-screen flex flex-col relative bg-transparent text-[#24272D] dark:text-white">
+      <Header
+        branding={branding}
+        isDemoMode={isDemoMode}
+        isDeviceOnline={isDeviceOnline}
+        onNavigateAdmin={onNavigateAdmin}
+        onNavigateHome={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        currentPage="public"
+      />
 
       <main className="relative z-10 flex-1 max-w-[1240px] w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-9 animate-fade-in">
-
-        {/* ── Demo Mode Banner ─────────────────────────────── */}
         {isDemoMode && (
-          <div
-            className="bg-[#EAF3FC] dark:bg-[#151515] border border-amber-300 dark:border-amber-800/80 rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-card"
-          >
+          <div className="bg-[#EAF3FC] dark:bg-[#151515] border border-amber-300 dark:border-amber-800/80 rounded-2xl px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-card">
             <div className="flex items-start gap-3">
               <Info className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" aria-hidden />
               <div>
@@ -163,7 +165,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
           </div>
         )}
 
-        {/* ── 1. AQI Gauge — Visual centrepiece ────────────── */}
         <section aria-labelledby="aqi-section-heading">
           <h2 id="aqi-section-heading" className="sr-only">Air Quality Index</h2>
           <AqiGauge
@@ -171,31 +172,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
             isStale={isDataStale}
             isOffline={isDeviceOffline}
             locationName={metadata?.locationName || branding.location}
-            sensorReadings={latestReading?.sensors}
+            sensorReadings={dashboardReading?.sensors}
           />
         </section>
 
-        {/* ── 2. Temperature + Humidity ────────────────────── */}
         <section aria-labelledby="climate-heading">
           <div className="mb-4">
             <p className="section-label">Meteorological</p>
             <h2 id="climate-heading" className="section-title">Temperature &amp; Humidity</h2>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <TemperatureCard
-              value={s?.temperature_c}
-              status={ss(s?.temperature_c)}
-              timestamp={latestReading?.timestamp}
-            />
-            <HumidityCard
-              value={s?.humidity_percent}
-              status={ss(s?.humidity_percent)}
-              timestamp={latestReading?.timestamp}
-            />
+            <TemperatureCard value={sensors?.temperature_c} status={sensorStatus(sensors?.temperature_c)} timestamp={dashboardReading?.timestamp} />
+            <HumidityCard value={sensors?.humidity_percent} status={sensorStatus(sensors?.humidity_percent)} timestamp={dashboardReading?.timestamp} />
           </div>
         </section>
 
-        {/* ── 3. Particulate Matter ─────────────────────────── */}
         <section aria-labelledby="pm-heading">
           <div className="mb-4 flex items-center gap-3">
             <div>
@@ -204,35 +195,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
-            <PMCard
-              label="PM1.0"
-              value={s?.pm1_0}
-              status={ss(s?.pm1_0)}
-              timestamp={latestReading?.timestamp}
-            />
+            <PMCard label="PM1.0" value={sensors?.pm1_0} status={sensorStatus(sensors?.pm1_0)} timestamp={dashboardReading?.timestamp} />
             <PMCard
               label="PM2.5"
-              value={s?.pm2_5}
-              status={ss(s?.pm2_5)}
-              timestamp={latestReading?.timestamp}
+              value={sensors?.pm2_5}
+              status={sensorStatus(sensors?.pm2_5)}
+              timestamp={dashboardReading?.timestamp}
               isPrimary
-              warningNote={
-                s?.pm2_5 && s.pm2_5 > 60 ? 'Exceeds 24-hr standard (60 µg/m³)' : undefined
-              }
+              warningNote={sensors?.pm2_5 && sensors.pm2_5 > 60 ? 'Exceeds 24-hr standard (60 µg/m³)' : undefined}
             />
             <PMCard
               label="PM10"
-              value={s?.pm10}
-              status={ss(s?.pm10)}
-              timestamp={latestReading?.timestamp}
-              warningNote={
-                s?.pm10 && s.pm10 > 100 ? 'Exceeds 24-hr standard (100 µg/m³)' : undefined
-              }
+              value={sensors?.pm10}
+              status={sensorStatus(sensors?.pm10)}
+              timestamp={dashboardReading?.timestamp}
+              warningNote={sensors?.pm10 && sensors.pm10 > 100 ? 'Exceeds 24-hr standard (100 µg/m³)' : undefined}
             />
           </div>
         </section>
 
-        {/* ── 4. Additional Sensors ─────────────────────────── */}
         <section aria-labelledby="gas-heading">
           <div className="mb-4">
             <p className="section-label">Additional Sensors</p>
@@ -240,23 +221,22 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
             <GasSensorCard
-              rawValue={s?.mq3_raw}
-              calibratedPpm={s?.mq3_ppm}
-              status={ss(s?.mq3_raw)}
-              timestamp={latestReading?.timestamp}
+              rawValue={sensors?.mq3_raw}
+              calibratedPpm={sensors?.mq3_ppm}
+              status={sensorStatus(sensors?.mq3_raw)}
+              timestamp={dashboardReading?.timestamp}
             />
             <LocationCard
-              lat={g?.latitude}
-              lng={g?.longitude}
-              isGpsValid={g?.valid}
-              satellites={g?.satellites}
-              altitude={g?.altitude_m}
+              lat={gps?.latitude}
+              lng={gps?.longitude}
+              isGpsValid={gps?.valid}
+              satellites={gps?.satellites}
+              altitude={gps?.altitude_m}
               configuredLocation={metadata?.locationName}
             />
           </div>
         </section>
 
-        {/* ── 5. Device Status ──────────────────────────────── */}
         <section aria-labelledby="device-status-heading">
           <div className="mb-4">
             <p className="section-label">Hardware</p>
@@ -264,14 +244,13 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
           </div>
           <DeviceStatusCard
             metadata={metadata}
-            latestReading={latestReading}
+            latestReading={dashboardReading}
             isOnline={isDeviceOnline}
             isStale={isDataStale}
             offlineTimeoutSeconds={offlineTimeout}
           />
         </section>
 
-        {/* ── 6. Historical Chart ───────────────────────────── */}
         <section aria-labelledby="history-heading">
           <div className="mb-4">
             <p className="section-label">Trends</p>
@@ -285,12 +264,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
             isDemoMode={isDemoMode}
           />
         </section>
-
       </main>
 
-      <div className="relative z-10">
-        <Footer onNavigateAdmin={onNavigateAdmin} />
-      </div>
+      <Footer onNavigateAdmin={onNavigateAdmin} />
     </div>
   );
 };

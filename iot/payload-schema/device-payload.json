@@ -6,17 +6,14 @@
   "required": ["deviceId", "timestamp", "firmwareVersion", "sensors", "gps", "connectivity"],
   "properties": {
     "deviceId": {
-      "type": "string",
-      "example": "SJEC-AQMS-ESP32-001"
+      "type": "string"
     },
     "timestamp": {
       "type": "integer",
-      "description": "Unix epoch milliseconds sampled by onboard RTC or NTP. Set to 0 if no time sync exists.",
-      "example": 1728841200000
+      "description": "Unix epoch milliseconds sampled by onboard RTC or NTP. Set to 0 if no time sync exists."
     },
     "firmwareVersion": {
-      "type": "string",
-      "example": "0.1.0"
+      "type": "string"
     },
     "sensors": {
       "type": "object",

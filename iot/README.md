@@ -35,6 +35,7 @@ The prototype comprises:
 3. If confirmed as a LoRa radio:
    - A standalone LoRa node cannot speak directly to Firebase over the internet.
    - It requires a **LoRa Gateway Bridge** (e.g. an ESP32 LoRa Gateway connected to campus Wi-Fi) that receives RF packets and forwards them via HTTPS to `/ingestTelemetry`.
+   - Enter LoRa frequency, spreading factor, bandwidth, coding rate, and sync word only after verifying the exact radio and gateway configuration. The supplied firmware does not implement a LoRa driver while the installed radio remains unconfirmed.
 
 ---
 
@@ -53,7 +54,7 @@ Refer to `hardware-config/hardware_pins_template.h`.
 
 ---
 
-## 4. How to Flash the Firmware
+## 4. Flash and Configure the Firmware
 
 ### Using Arduino IDE:
 1. Install **ESP32 Board Support** in Arduino IDE:
@@ -65,9 +66,12 @@ Refer to `hardware-config/hardware_pins_template.h`.
    - `DHT sensor library` by Adafruit
    - `Adafruit Unified Sensor`
    - `TinyGPSPlus` by Mikal Hart
-3. Open `firmware/sjec_aqms_esp32.ino`.
-4. Update `WIFI_SSID`, `WIFI_PASSWORD`, and `INGESTION_URL`.
-5. Select Board: **ESP32 Dev Module** or **DOIT ESP32 DEVKIT V1**.
-6. Set Upload Speed: **921600** (or 115200 if connection drops).
-7. Hold the **BOOT** button on the ESP32 when `Connecting........_____` appears in the terminal until flashing begins.
-8. Open Serial Monitor at **115200 baud** to view real-time telemetry logs.
+3. Verify `hardware-config/hardware_pins_template.h` against the assembled PCB and connected sensor modules. The firmware currently reads the configured PMS UART, MQ-3 ADC, DHT22, and GPS UART. It sends null for unavailable DHT/GPS/PM values; it has no fabricated fallback readings.
+4. Open `firmware/sjec_aqms_esp32.ino`. The source contains no Wi-Fi password, device ID, endpoint, or device token. Do not add those credentials to committed source.
+5. Select the actual ESP32 board and upload speed for the board in hand. Upload the firmware over USB.
+6. In Firebase, create and enroll the administrator UID as described in `firebase/README.md`. Configure the app's Firebase Web SDK values and deploy Realtime Database rules and Functions with `firebase deploy --only database,functions`.
+7. In the admin page, enter the actual device ID and name, reporting interval, connection timeout, deployed HTTPS `ingestTelemetry` URL, and the CA certificate that validates that endpoint. Generate a device token and save the configuration. Copy no Wi-Fi password or plaintext token into Firebase.
+8. Enter the actual Wi-Fi SSID and password in the admin provisioning section, click **Provision over USB**, and select the physically attached ESP32 in the browser's serial-port picker. Use Chrome or Edge on HTTPS (localhost is also a secure browser context). The firmware stores the settings in ESP32 NVS and restarts; the page reports success only after a matching acknowledgement from that device. The password is sent over the local USB serial connection, not over WebSocket/HTTP, and is not saved in browser storage or Firebase.
+9. Confirm the firmware reports Wi-Fi connection and that real sensor packets appear under `/devices/{deviceId}/latest` and `/history` in Realtime Database. The public dashboard reads only these stored records.
+
+The included ESP32 firmware posts HTTPS telemetry to the deployed Function; it does **not** run a WebSocket server. The admin WebSocket client is for a separately configured ESP32/gateway that actually serves compatible JSON messages. On an HTTPS-hosted site it must use `wss://`. A LoRa radio without an IP-connected gateway cannot be reached by the browser client.

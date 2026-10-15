@@ -1,15 +1,13 @@
 import * as functions from 'firebase-functions';
 import * as admin from 'firebase-admin';
+import { createHash, timingSafeEqual } from 'crypto';
 
 admin.initializeApp();
 const db = admin.database();
 
-// Pre-shared default device ingestion secret (Can also be checked against /devices/{id}/metadata/token)
-const MASTER_INGESTION_SECRET = process.env.DEVICE_INGESTION_SECRET || 'sjec_aqms_sec_9f48a12e5c89304b';
-
 // In-memory rate limiting map (per function instance)
 const lastRequestTimestamps = new Map<string, number>();
-const MIN_REQUEST_INTERVAL_MS = 5000; // 5 seconds between packets
+const MIN_REQUEST_INTERVAL_MS = 1000;
 
 interface SensorPayload {
   pm1_0: number | null;
@@ -40,16 +38,17 @@ interface DeviceTelemetryBody {
 }
 
 export const ingestTelemetry = functions.https.onRequest(async (req, res) => {
-  // 1. Only allow POST requests
-  if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
+  res.set('Access-Control-Allow-Origin', '*');
+  res.set('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.set('Access-Control-Allow-Headers', 'Content-Type, X-Device-Token, Authorization');
+  if (req.method === 'OPTIONS') {
+    res.status(204).send('');
     return;
   }
 
-  // 2. Authenticate Request via X-Device-Token Header
-  const clientToken = req.headers['x-device-token'] || req.headers['authorization']?.replace('Bearer ', '');
-  if (!clientToken || clientToken !== MASTER_INGESTION_SECRET) {
-    res.status(401).json({ error: 'Unauthorized: Missing or invalid device token.' });
+  // 1. Only allow POST requests
+  if (req.method !== 'POST') {
+    res.status(405).json({ error: 'Method Not Allowed. Use POST.' });
     return;
   }
 
@@ -63,35 +62,62 @@ export const ingestTelemetry = functions.https.onRequest(async (req, res) => {
 
   const { deviceId, timestamp, firmwareVersion, sensors, gps, connectivity } = payload;
 
-  if (!deviceId || typeof deviceId !== 'string' || deviceId.trim().length === 0) {
+  if (
+    !deviceId ||
+    typeof deviceId !== 'string' ||
+    deviceId.trim().length === 0 ||
+    /[.#$\[\]/]/.test(deviceId)
+  ) {
     res.status(400).json({ error: 'Bad Request: Missing or invalid deviceId string.' });
     return;
   }
 
-  // 4. Rate Limiting Check
   const now = Date.now();
+  const clientTokenHeader = req.headers['x-device-token'] || req.headers['authorization']?.replace(/^Bearer\s+/i, '');
+  const clientToken = Array.isArray(clientTokenHeader) ? clientTokenHeader[0] : clientTokenHeader;
+  if (typeof clientToken !== 'string' || clientToken.length < 32) {
+    res.status(401).json({ error: 'Unauthorized: Missing or invalid device token.' });
+    return;
+  }
+
+  // 4. Require an enabled registration and a per-device token hash.
+  let metadata: any;
+  try {
+    const [metaSnapshot, tokenSnapshot] = await Promise.all([
+      db.ref(`devices/${deviceId}/metadata`).once('value'),
+      db.ref(`devices/${deviceId}/private/deviceTokenHash`).once('value'),
+    ]);
+    if (!metaSnapshot.exists() || !tokenSnapshot.exists()) {
+      res.status(403).json({ error: 'Forbidden: Device is not registered with an ingestion token.' });
+      return;
+    }
+    metadata = metaSnapshot.val();
+    const expectedHash = tokenSnapshot.val();
+    const actualHash = createHash('sha256').update(clientToken).digest();
+    const expectedBytes = typeof expectedHash === 'string' ? Buffer.from(expectedHash, 'hex') : Buffer.alloc(0);
+    if (metadata.enabled !== true) {
+      res.status(403).json({ error: 'Forbidden: Device is disabled in admin settings.' });
+      return;
+    }
+    if (expectedBytes.length !== actualHash.length || !timingSafeEqual(actualHash, expectedBytes)) {
+      res.status(401).json({ error: 'Unauthorized: Invalid device token.' });
+      return;
+    }
+  } catch (err) {
+    console.error(`Error verifying device authorization for ${deviceId}:`, err);
+    res.status(500).json({ error: 'Unable to verify device authorization.' });
+    return;
+  }
+
+  // 5. Rate limiting after authentication avoids unauthenticated key poisoning.
   const lastTime = lastRequestTimestamps.get(deviceId) || 0;
   if (now - lastTime < MIN_REQUEST_INTERVAL_MS) {
-    res.status(429).json({ error: 'Too Many Requests: Minimum interval between packets is 5s.' });
+    res.status(429).json({ error: 'Too Many Requests: Minimum interval between packets is 1s.' });
     return;
   }
   lastRequestTimestamps.set(deviceId, now);
 
-  // 5. Verify Device Authorization in Realtime Database
-  try {
-    const metaSnapshot = await db.ref(`devices/${deviceId}/metadata`).once('value');
-    if (metaSnapshot.exists()) {
-      const meta = metaSnapshot.val();
-      if (meta.enabled === false) {
-        res.status(403).json({ error: `Forbidden: Device ${deviceId} is disabled in admin settings.` });
-        return;
-      }
-    }
-  } catch (err) {
-    console.error(`Error verifying metadata for ${deviceId}:`, err);
-  }
-
-  // 6. Validate Timestamps
+  // 6. Validate timestamps and reject sensor payloads without actual readings.
   let validTimestamp = typeof timestamp === 'number' && timestamp > 0 ? timestamp : now;
   // If timestamp is unreasonably in future (> 10 mins) or past (> 30 days)
   if (validTimestamp > now + 600000 || validTimestamp < now - 30 * 86400000) {
@@ -112,32 +138,59 @@ export const ingestTelemetry = functions.https.onRequest(async (req, res) => {
   const sanitizedGps = {
     latitude: typeof gps?.latitude === 'number' && gps.latitude >= -90 && gps.latitude <= 90 ? gps.latitude : null,
     longitude: typeof gps?.longitude === 'number' && gps.longitude >= -180 && gps.longitude <= 180 ? gps.longitude : null,
-    valid: Boolean(gps?.valid && gps.latitude && gps.longitude),
+    valid: Boolean(
+      gps?.valid &&
+      typeof gps.latitude === 'number' && gps.latitude >= -90 && gps.latitude <= 90 &&
+      typeof gps.longitude === 'number' && gps.longitude >= -180 && gps.longitude <= 180
+    ),
     altitude_m: typeof gps?.altitude_m === 'number' ? gps.altitude_m : null,
     satellites: typeof gps?.satellites === 'number' ? gps.satellites : null,
   };
+  if (!Object.values(sanitizedSensors).some((value) => value !== null) && !sanitizedGps.valid) {
+    res.status(400).json({ error: 'Bad Request: No valid sensor reading or GPS fix was provided.' });
+    return;
+  }
+  const intervalSeconds = Number(metadata.expectedIntervalSeconds);
+  if (!Number.isFinite(intervalSeconds) || intervalSeconds < 1 || intervalSeconds > 3600) {
+    res.status(400).json({ error: 'Bad Request: Device reporting interval is not configured.' });
+    return;
+  }
 
   // 9. Format Final Validated Ingestion Record
   const ingestedRecord = {
     deviceId,
     timestamp: validTimestamp,
     serverReceivedAt: now,
-    firmwareVersion: typeof firmwareVersion === 'string' ? firmwareVersion : '0.1.0',
+    firmwareVersion: typeof firmwareVersion === 'string' ? firmwareVersion : '',
     sensors: sanitizedSensors,
     gps: sanitizedGps,
     connectivity: {
-      transport: connectivity?.transport || 'wifi',
+      transport: ['wifi', 'lora_gateway', 'cellular', 'other'].includes(connectivity?.transport)
+        ? connectivity.transport
+        : 'unconfigured',
       rssi_dbm: typeof connectivity?.rssi_dbm === 'number' ? connectivity.rssi_dbm : null,
       snr_db: typeof connectivity?.snr_db === 'number' ? connectivity.snr_db : null,
     },
+    source: 'hardware',
   };
 
   try {
     // Write latest packet
     await db.ref(`devices/${deviceId}/latest`).set(ingestedRecord);
 
-    // Push into historical time-series
-    const newHistRef = await db.ref(`devices/${deviceId}/history`).push(ingestedRecord);
+    const historyRef = db.ref(`devices/${deviceId}/history`);
+    const previousHistory = await historyRef.limitToLast(1).once('value');
+    let lastHistoryTimestamp = 0;
+    previousHistory.forEach((child) => {
+      const record = child.val();
+      lastHistoryTimestamp = Math.max(lastHistoryTimestamp, record.serverReceivedAt || 0);
+    });
+    let readingId: string | null = null;
+    if (!lastHistoryTimestamp || now - lastHistoryTimestamp >= intervalSeconds * 1000) {
+      const newHistRef = historyRef.push();
+      readingId = newHistRef.key;
+      await newHistRef.set({ ...ingestedRecord, id: readingId });
+    }
 
     // Update status
     await db.ref(`devices/${deviceId}/status`).update({
@@ -151,11 +204,42 @@ export const ingestTelemetry = functions.https.onRequest(async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Telemetry packet ingested successfully.',
-      readingId: newHistRef.key,
+      readingId,
       serverReceivedAt: now,
     });
   } catch (err: any) {
     console.error(`Database write failure for ${deviceId}:`, err);
     res.status(500).json({ error: 'Internal Database Error during telemetry ingestion.' });
+  }
+});
+
+export const purgeExpiredHistory = functions.pubsub.schedule('every 24 hours').onRun(async () => {
+  const cutoff = Date.now() - 30 * 86400000;
+  try {
+    const devicesSnapshot = await db.ref('devices').once('value');
+    const purgeJobs: Promise<void>[] = [];
+    devicesSnapshot.forEach((deviceSnapshot) => {
+      const deviceId = deviceSnapshot.key;
+      if (!deviceId) return;
+      const historyRef = db.ref(`devices/${deviceId}/history`);
+      const purgeJob = historyRef
+        .orderByChild('timestamp')
+        .endAt(cutoff)
+        .once('value')
+        .then(async (oldRecords) => {
+          if (!oldRecords.exists()) return;
+          const updates: Record<string, null> = {};
+          oldRecords.forEach((record) => {
+            if (record.key) updates[record.key] = null;
+          });
+          await historyRef.update(updates);
+        });
+      purgeJobs.push(purgeJob);
+    });
+    await Promise.all(purgeJobs);
+    return null;
+  } catch (error) {
+    console.error('[AQMS Retention] Failed to purge expired history:', error);
+    return null;
   }
 });

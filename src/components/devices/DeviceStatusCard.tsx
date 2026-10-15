@@ -27,7 +27,7 @@ const getTransportLabel = (t: TransportType) => {
     case 'wifi':         return 'Wi-Fi Direct HTTPS';
     case 'lora_gateway': return 'LoRa Gateway Ingestion';
     case 'cellular':     return 'Cellular IoT';
-    default:             return 'Configured Network';
+    default:             return 'Not configured';
   }
 };
 
@@ -59,7 +59,7 @@ export const DeviceStatusCard: React.FC<DeviceStatusCardProps> = ({
   offlineTimeoutSeconds,
 }) => {
   const transport: TransportType =
-    latestReading?.connectivity.transport || metadata?.transport || 'wifi';
+    latestReading?.connectivity.transport || metadata?.transport || 'unconfigured';
   const hasGpsFix = Boolean(latestReading?.gps?.valid);
 
   return (
@@ -72,10 +72,10 @@ export const DeviceStatusCard: React.FC<DeviceStatusCardProps> = ({
           </div>
           <div>
             <h3 className="font-extrabold text-[#24272D] dark:text-white text-base">
-              {metadata?.name || 'ESP32 Sensing Node'}
+              {metadata?.name || 'Device not configured'}
             </h3>
             <p className="text-xs text-[#687583] dark:text-[#A0A0A0] font-mono mt-0.5">
-              ID: {metadata?.deviceId || 'SJEC-AQMS-ESP32-001'} · Firmware: {latestReading?.firmwareVersion || metadata?.firmwareVersion || 'v1.4.0'}
+              ID: {metadata?.deviceId || 'Not configured'} · Firmware: {latestReading?.firmwareVersion || metadata?.firmwareVersion || 'Not reported'}
             </p>
           </div>
         </div>
@@ -104,21 +104,21 @@ export const DeviceStatusCard: React.FC<DeviceStatusCardProps> = ({
           icon={getTransportIcon(transport)}
           label="Telemetry Radio"
           value={getTransportLabel(transport)}
-          sub={latestReading?.connectivity.rssi_dbm ? `RSSI ${latestReading.connectivity.rssi_dbm} dBm` : 'Normal RF Link'}
+          sub={latestReading?.connectivity.rssi_dbm != null ? `RSSI ${latestReading.connectivity.rssi_dbm} dBm` : 'No signal report'}
         />
 
         <StatCell
           icon={<Signal className="w-4 h-4 text-emerald-500" aria-hidden />}
           label="Reporting Rate"
-          value={`${metadata?.expectedIntervalSeconds || 15}s interval`}
+          value={metadata?.expectedIntervalSeconds ? `${metadata.expectedIntervalSeconds}s interval` : 'Not configured'}
           sub={`Timeout: ${offlineTimeoutSeconds}s`}
         />
 
         <StatCell
           icon={<MapPin className="w-4 h-4 text-[#397FC0] dark:text-[#64B5F6]" aria-hidden />}
           label="GPS Fix Status"
-          value={hasGpsFix ? '3D Satellite Fix' : 'Internal Coordinates'}
-          sub={hasGpsFix ? `${latestReading?.gps?.satellites ?? 0} sats locked` : 'Static campus node'}
+          value={hasGpsFix ? 'GPS Fix' : 'No GPS Fix'}
+          sub={hasGpsFix ? `${latestReading?.gps?.satellites ?? 'Unknown'} satellites` : 'Awaiting GPS data'}
         />
 
         <StatCell

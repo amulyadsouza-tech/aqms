@@ -24,22 +24,28 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
+#include <DHT.h>
+#include <TinyGPSPlus.h>
+#include <math.h>
 #include <time.h>
 #include "../hardware-config/hardware_pins_template.h"
 
 // ============================================================================
-// CONFIGURATION & CREDENTIALS (REPLACE WITH YOUR LOCAL SETTINGS)
+// Device and network settings are loaded through the USB provisioning protocol.
 // ============================================================================
-const char* WIFI_SSID         = "SJEC_CAMPUS_WIFI";       // Your campus / lab Wi-Fi SSID
-const char* WIFI_PASSWORD     = "Your_WiFi_Password";     // Your Wi-Fi Password
-
-// Telemetry Ingestion Endpoint (Cloud Function or Node Backend)
-const char* INGESTION_URL     = "https://us-central1-sjec-aqms.cloudfunctions.net/ingestTelemetry";
-const char* DEVICE_TOKEN      = "sjec_aqms_sec_9f48a12e5c89304b"; // X-Device-Token Header
-
-const char* DEVICE_ID         = "SJEC-AQMS-ESP32-001";
 const char* FIRMWARE_VERSION  = "0.1.0";
-const unsigned long INTERVAL_MS = 30000;                  // 30 seconds between packets
+
+Preferences devicePreferences;
+TinyGPSPlus gpsParser;
+DHT tempHumiditySensor(DHT_PIN, DHT_TYPE);
+String wifiSsid;
+String wifiPassword;
+String deviceId;
+String ingestionUrl;
+String ingestionRootCa;
+String deviceToken;
+uint32_t reportingIntervalSeconds = 0;
 
 // NTP Server Configuration for IST (Indian Standard Time UTC+5:30)
 const char* NTP_SERVER        = "pool.ntp.org";
@@ -65,14 +71,16 @@ struct TelemetryPacket {
   int   satellites;
   float altitude;
   int   wifi_rssi;
-  unsigned long timestamp_epoch_ms;
+  uint64_t timestamp_epoch_ms;
 };
 
 // ============================================================================
 // FUNCTION DECLARATIONS
 // ============================================================================
 void connectWiFi();
-unsigned long getEpochMs();
+void loadProvisionedConfig();
+void processSerialProvisioning();
+uint64_t getEpochMs();
 bool readPmsSensor(float &pm1_0, float &pm2_5, float &pm10);
 int readMq3Sensor();
 void readTempHumidity(float &temp, float &hum);
@@ -84,51 +92,72 @@ void transmitTelemetryRadioPlaceholder(const TelemetryPacket &pkt);
 // SETUP
 // ============================================================================
 void setup() {
+  Serial.setRxBufferSize(8192);
   Serial.begin(115200);
   delay(1500);
 
   Serial.println("\n=======================================================");
-  Serial.println("  SJEC AQMS - Environmental Sensing Node Initializing");
-  Serial.println("  St. Joseph Engineering College, Vamanjoor, Mangaluru");
-  Serial.printf("  Device ID: %s | Firmware: %s\n", DEVICE_ID, FIRMWARE_VERSION);
+  Serial.println("  AQMS - Environmental Sensing Node Initializing");
+  Serial.printf("  Firmware: %s\n", FIRMWARE_VERSION);
   Serial.println("=======================================================\n");
 
+  devicePreferences.begin("aqms-device", false);
+  loadProvisionedConfig();
   pinMode(PIN_STATUS_LED, OUTPUT);
   digitalWrite(PIN_STATUS_LED, LOW);
 
   // Initialize PMS Sensor UART (9600 baud, 8N1)
   PmsSerial.begin(9600, SERIAL_8N1, PMS_RX_PIN, PMS_TX_PIN);
-  Serial.println("[HW] PMS5003 Serial initialized on UART2 (RX: 16, TX: 17)");
+  Serial.println("[HW] Particulate sensor UART initialized.");
 
   // Configure MQ-3 ADC
   analogReadResolution(12); // 12-bit (0-4095 counts)
   analogSetPinAttenuation(MQ3_ANALOG_PIN, ADC_11db); // 0 - 3.3V range
-  Serial.printf("[HW] MQ-3 Gas Sensor configured on ADC1 Pin %d\n", MQ3_ANALOG_PIN);
+  Serial.printf("[HW] MQ-3 ADC configured on pin %d\n", MQ3_ANALOG_PIN);
 
-  // Connect to Wi-Fi Network
-  connectWiFi();
+  tempHumiditySensor.begin();
+  Serial1.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+
+  if (wifiSsid.length() > 0) connectWiFi();
 
   // Initialize NTP time sync
   configTime(GMT_OFFSET_SEC, DAYLIGHT_OFFSET, NTP_SERVER);
   Serial.println("[NTP] Synchronizing with Indian Standard Time...");
 
-  Serial.println("\n[SYSTEM] Initialization complete. Entering periodic sampling loop.\n");
+  Serial.println("\n[SYSTEM] Initialization complete.\n");
 }
 
 // ============================================================================
 // MAIN LOOP
 // ============================================================================
 void loop() {
+  processSerialProvisioning();
+  if (deviceId.length() == 0 || wifiSsid.length() == 0 || ingestionUrl.length() == 0 ||
+      ingestionRootCa.length() == 0 || deviceToken.length() == 0 || reportingIntervalSeconds == 0) {
+    delay(50);
+    return;
+  }
+
   digitalWrite(PIN_STATUS_LED, HIGH); // Blink LED during sampling
   Serial.println("\n-------------------------------------------------------");
   Serial.printf("[SAMPLE] Sampling sensors at %lu ms...\n", millis());
 
   TelemetryPacket pkt;
   pkt.timestamp_epoch_ms = getEpochMs();
+  pkt.pm1_0 = -1.0;
+  pkt.pm2_5 = -1.0;
+  pkt.pm10 = -1.0;
+  pkt.temperature = NAN;
+  pkt.humidity = NAN;
+  pkt.latitude = NAN;
+  pkt.longitude = NAN;
+  pkt.gps_valid = false;
+  pkt.satellites = -1;
+  pkt.altitude = NAN;
 
   // 1. Read PMS Particulate Sensor
   if (!readPmsSensor(pkt.pm1_0, pkt.pm2_5, pkt.pm10)) {
-    Serial.println("[PMS] Warning: Checksum or frame timeout. Assigning NULL (-1).");
+    Serial.println("[PMS] No valid sensor frame received.");
     pkt.pm1_0 = -1.0;
     pkt.pm2_5 = -1.0;
     pkt.pm10  = -1.0;
@@ -176,8 +205,9 @@ void loop() {
   #endif
 
   digitalWrite(PIN_STATUS_LED, LOW);
-  Serial.printf("[SLEEP] Sleeping for %lu ms...\n", INTERVAL_MS);
-  delay(INTERVAL_MS);
+  const uint32_t intervalMs = reportingIntervalSeconds * 1000UL;
+  Serial.printf("[SLEEP] Sleeping for %lu ms...\n", static_cast<unsigned long>(intervalMs));
+  delay(intervalMs);
 }
 
 // ============================================================================
@@ -230,44 +260,47 @@ int readMq3Sensor() {
  * Reads Temperature and Humidity
  */
 void readTempHumidity(float &temp, float &hum) {
-  // Replace with real DHT22 or SHT31 sensor call once library is included
-  // e.g.: temp = dht.readTemperature(); hum = dht.readHumidity();
-  temp = 29.5; // Typical Mangaluru coastal temperature
-  hum  = 75.0; // Typical relative humidity
+  temp = tempHumiditySensor.readTemperature();
+  hum = tempHumiditySensor.readHumidity();
 }
 
 /**
  * Reads GPS NMEA Strings
  */
 void readGps(double &lat, double &lng, bool &valid, int &sats, float &alt) {
-  // In production, parse NMEA sentences via TinyGPSPlus on Serial1
-  // Valid flag is FALSE until real 3D fix is acquired
-  valid = false;
-  lat = 0.0;
-  lng = 0.0;
-  sats = 0;
-  alt = 0.0;
+  while (Serial1.available() > 0) gpsParser.encode(Serial1.read());
+  valid = gpsParser.location.isValid() && gpsParser.location.age() < 5000;
+  if (!valid) return;
+  lat = gpsParser.location.lat();
+  lng = gpsParser.location.lng();
+  sats = gpsParser.satellites.isValid() ? gpsParser.satellites.value() : -1;
+  alt = gpsParser.altitude.isValid() ? gpsParser.altitude.meters() : NAN;
 }
 
 // ============================================================================
 // TELEMETRY TRANSMISSION (DIRECT WI-FI HTTPS)
 // ============================================================================
 bool transmitTelemetryHttp(const TelemetryPacket &pkt) {
+  if (!ingestionUrl.startsWith("https://") || ingestionRootCa.length() == 0 || deviceToken.length() == 0) {
+    Serial.println("[HTTP] Secure ingestion configuration is incomplete.");
+    return false;
+  }
+
   WiFiClientSecure client;
-  client.setInsecure(); // In production, add root CA certificate for Firebase
+  client.setCACert(ingestionRootCa.c_str());
 
   HTTPClient http;
-  if (!http.begin(client, INGESTION_URL)) {
+  if (!http.begin(client, ingestionUrl.c_str())) {
     Serial.println("[HTTP] Failed to initialize connection to endpoint.");
     return false;
   }
 
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("X-Device-Token", DEVICE_TOKEN);
+  http.addHeader("X-Device-Token", deviceToken.c_str());
 
   // Construct JSON document according to SJEC AQMS schema
   StaticJsonDocument<768> doc;
-  doc["deviceId"] = DEVICE_ID;
+  doc["deviceId"] = deviceId;
   doc["timestamp"] = pkt.timestamp_epoch_ms;
   doc["firmwareVersion"] = FIRMWARE_VERSION;
 
@@ -276,15 +309,31 @@ bool transmitTelemetryHttp(const TelemetryPacket &pkt) {
   sensors["pm2_5"] = (pkt.pm2_5 >= 0) ? pkt.pm2_5 : nullptr;
   sensors["pm10"]  = (pkt.pm10 >= 0)  ? pkt.pm10  : nullptr;
   sensors["mq3_raw"] = pkt.mq3_raw;
-  sensors["temperature_c"] = pkt.temperature;
-  sensors["humidity_percent"] = pkt.humidity;
+  if (isfinite(pkt.temperature) && pkt.temperature >= -40 && pkt.temperature <= 85) {
+    sensors["temperature_c"] = pkt.temperature;
+  } else {
+    sensors["temperature_c"] = nullptr;
+  }
+  if (isfinite(pkt.humidity) && pkt.humidity >= 0 && pkt.humidity <= 100) {
+    sensors["humidity_percent"] = pkt.humidity;
+  } else {
+    sensors["humidity_percent"] = nullptr;
+  }
 
   JsonObject gps = doc.createNestedObject("gps");
   gps["latitude"]  = pkt.gps_valid ? pkt.latitude : nullptr;
   gps["longitude"] = pkt.gps_valid ? pkt.longitude : nullptr;
   gps["valid"]     = pkt.gps_valid;
-  gps["altitude_m"] = pkt.altitude;
-  gps["satellites"] = pkt.satellites;
+  if (pkt.gps_valid && isfinite(pkt.altitude)) {
+    gps["altitude_m"] = pkt.altitude;
+  } else {
+    gps["altitude_m"] = nullptr;
+  }
+  if (pkt.gps_valid && pkt.satellites >= 0) {
+    gps["satellites"] = pkt.satellites;
+  } else {
+    gps["satellites"] = nullptr;
+  }
 
   JsonObject conn = doc.createNestedObject("connectivity");
   conn["transport"] = "wifi";
@@ -327,9 +376,13 @@ void transmitTelemetryRadioPlaceholder(const TelemetryPacket &pkt) {
 // HELPERS
 // ============================================================================
 void connectWiFi() {
-  Serial.printf("[WIFI] Connecting to SSID '%s'...", WIFI_SSID);
+  if (wifiSsid.length() == 0) {
+    Serial.println("[WIFI] No SSID provisioned.");
+    return;
+  }
+  Serial.println("[WIFI] Connecting to the provisioned network...");
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  WiFi.begin(wifiSsid.c_str(), wifiPassword.c_str());
 
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 20) {
@@ -347,9 +400,75 @@ void connectWiFi() {
   }
 }
 
-unsigned long getEpochMs() {
+void loadProvisionedConfig() {
+  wifiSsid = devicePreferences.getString("ssid", "");
+  wifiPassword = devicePreferences.getString("wifiPassword", "");
+  deviceId = devicePreferences.getString("deviceId", "");
+  ingestionUrl = devicePreferences.getString("ingestionUrl", "");
+  ingestionRootCa = devicePreferences.getString("rootCa", "");
+  deviceToken = devicePreferences.getString("deviceToken", "");
+  reportingIntervalSeconds = devicePreferences.getUInt("reportInterval", 0);
+}
+
+void processSerialProvisioning() {
+  if (!Serial.available()) return;
+  String line = Serial.readStringUntil('\n');
+  if (!line.startsWith("AQMS_CONFIG:")) return;
+
+  DynamicJsonDocument doc(8192);
+  const DeserializationError error = deserializeJson(doc, line.substring(12));
+  const char* requestId = doc["requestId"] | "";
+  const char* nextDeviceId = doc["deviceId"] | "";
+  const char* nextSsid = doc["ssid"] | "";
+  const char* nextIngestionUrl = doc["ingestionUrl"] | "";
+  const char* nextRootCa = doc["ingestionRootCa"] | "";
+  const char* nextToken = doc["deviceToken"] | "";
+  const uint32_t nextInterval = doc["reportingIntervalSeconds"] | 0;
+
+  if (error || String(requestId).length() == 0 || String(nextDeviceId).length() == 0 || String(nextSsid).length() == 0 ||
+      !String(nextIngestionUrl).startsWith("https://") || String(nextRootCa).length() == 0 ||
+      String(nextToken).length() < 32 || nextInterval < 1 || nextInterval > 3600) {
+    Serial.println("AQMS_CONFIG_ERROR");
+    return;
+  }
+
+  wifiSsid = nextSsid;
+  wifiPassword = doc["password"] | "";
+  deviceId = nextDeviceId;
+  ingestionUrl = nextIngestionUrl;
+  ingestionRootCa = nextRootCa;
+  deviceToken = nextToken;
+  reportingIntervalSeconds = nextInterval;
+
+  const bool stored =
+    devicePreferences.putString("ssid", wifiSsid) > 0 &&
+    (devicePreferences.putString("wifiPassword", wifiPassword) > 0 || wifiPassword.length() == 0) &&
+    devicePreferences.putString("deviceId", deviceId) > 0 &&
+    devicePreferences.putString("ingestionUrl", ingestionUrl) > 0 &&
+    devicePreferences.putString("rootCa", ingestionRootCa) > 0 &&
+    devicePreferences.putString("deviceToken", deviceToken) > 0 &&
+    devicePreferences.putUInt("reportInterval", reportingIntervalSeconds) > 0;
+  const bool verified =
+    devicePreferences.getString("ssid", "") == wifiSsid &&
+    devicePreferences.getString("wifiPassword", "") == wifiPassword &&
+    devicePreferences.getString("deviceId", "") == deviceId &&
+    devicePreferences.getString("ingestionUrl", "") == ingestionUrl &&
+    devicePreferences.getString("rootCa", "") == ingestionRootCa &&
+    devicePreferences.getString("deviceToken", "") == deviceToken &&
+    devicePreferences.getUInt("reportInterval", 0) == reportingIntervalSeconds;
+  if (!stored || !verified) {
+    Serial.println("AQMS_CONFIG_ERROR");
+    return;
+  }
+
+  Serial.printf("AQMS_CONFIG_OK:%s\n", requestId);
+  delay(250);
+  ESP.restart();
+}
+
+uint64_t getEpochMs() {
   time_t now;
   time(&now);
   if (now < 100000) return 0; // NTP not synced yet
-  return ((unsigned long)now) * 1000ULL;
+  return static_cast<uint64_t>(now) * 1000ULL;
 }

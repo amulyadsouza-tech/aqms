@@ -42,6 +42,8 @@ export const HistoricalDataTab: React.FC<HistoricalDataTabProps> = ({
     const headers = [
       'Timestamp_ISO',
       'Device_ID',
+      'Source',
+      'Recorded_By',
       'PM1_0_ug_m3',
       'PM2_5_ug_m3',
       'PM10_ug_m3',
@@ -57,6 +59,8 @@ export const HistoricalDataTab: React.FC<HistoricalDataTabProps> = ({
     const rows = historicalData.map((d) => [
       new Date(d.timestamp).toISOString(),
       d.deviceId,
+      d.source || 'hardware',
+      d.recordedBy || 'device',
       d.sensors.pm1_0 ?? '',
       d.sensors.pm2_5 ?? '',
       d.sensors.pm10 ?? '',
@@ -154,7 +158,7 @@ export const HistoricalDataTab: React.FC<HistoricalDataTabProps> = ({
                 <th className="py-3 px-3">Temp (°C)</th>
                 <th className="py-3 px-3">Humidity (%)</th>
                 <th className="py-3 px-3">GPS Fix</th>
-                <th className="py-3 px-3">Transport</th>
+                <th className="py-3 px-3">Source / Transport</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60 font-mono">
@@ -197,8 +201,16 @@ export const HistoricalDataTab: React.FC<HistoricalDataTabProps> = ({
                         <span className="text-slate-400">No Fix</span>
                       )}
                     </td>
-                    <td className="py-2.5 px-3 uppercase text-[10px] text-slate-500">
-                      {row.connectivity.transport}
+                    <td className="py-2.5 px-3 uppercase text-[10px]">
+                      {row.source === 'manual' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-200 dark:border-purple-800" title={`Recorded by ${row.recordedBy || 'admin'}`}>
+                          Manual Entry
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 font-mono">
+                          {row.connectivity.transport}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))

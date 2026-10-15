@@ -120,7 +120,7 @@ export const BrandingTab: React.FC<BrandingTabProps> = ({
   const handleResetToDefaultLogo = async () => {
     const updated = {
       ...formData,
-      logoUrl: null,
+      logoUrl: '/sjec-logo.png',
       isCustomLogo: false,
       lastUpdated: Date.now(),
     };
@@ -129,12 +129,12 @@ export const BrandingTab: React.FC<BrandingTabProps> = ({
         await saveBranding(updated);
       }
       setFormData(updated);
-      setPreviewUrl(null);
+      setPreviewUrl('/sjec-logo.png');
       setSelectedFile(null);
       onBrandingUpdated(updated);
       setStatusMessage({
         type: 'success',
-        text: 'Reset to default institutional placeholder logo.',
+        text: 'Reset to default institutional emblem logo.',
       });
     } catch (err: any) {
       setStatusMessage({ type: 'error', text: err.message });
@@ -202,9 +202,9 @@ export const BrandingTab: React.FC<BrandingTabProps> = ({
               Current Header Logo
             </span>
             <div className="w-28 h-28 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 shadow-sm overflow-hidden">
-              {previewUrl ? (
+              {previewUrl || '/sjec-logo.png' ? (
                 <img
-                  src={previewUrl}
+                  src={previewUrl || '/sjec-logo.png'}
                   alt="SJEC Logo Preview"
                   className="max-h-full max-w-full object-contain"
                 />

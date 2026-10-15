@@ -100,8 +100,10 @@
   #define LORA_RST_PIN          14      // Reset (RST)
   #define LORA_DIO0_PIN         26      // Interrupt (DIO0)
   
-  // Carrier Frequency: In India, license-free LoRa bands are 865-867 MHz or 433 MHz
-  #define LORA_FREQUENCY_HZ     433E6   // Verify against antenna length & module crystal!
+  // Define LORA_FREQUENCY_HZ only after verifying the installed module and regional band.
+  #ifndef LORA_FREQUENCY_HZ
+    #error "Define the verified LORA_FREQUENCY_HZ before enabling this radio profile."
+  #endif
 #endif
 
 #endif // HARDWARE_PINS_TEMPLATE_H

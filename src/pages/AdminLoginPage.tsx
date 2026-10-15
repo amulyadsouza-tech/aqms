@@ -62,8 +62,8 @@ export const AdminLoginPage: React.FC<AdminLoginPageProps> = ({
 
         {/* Brand Header */}
         <div className="text-center">
-          <div className="inline-flex p-3 rounded-2xl bg-white/80 dark:bg-[#1D1D1D]/80 text-institute-blue dark:text-[#64B5F6] mb-3 border border-slate-200 dark:border-[#303030] shadow-sm">
-            <School className="w-8 h-8" />
+          <div className="inline-flex p-2 rounded-2xl bg-white/80 dark:bg-[#1D1D1D]/80 mb-3 border border-slate-200 dark:border-[#303030] shadow-sm w-16 h-16 items-center justify-center overflow-hidden">
+            <img src="/sjec-logo.png" alt="SJEC Logo" className="w-full h-full object-contain" />
           </div>
           <h2 className="text-2xl font-extrabold tracking-tight text-[#24272D] dark:text-white">
             SJEC AQMS Administration

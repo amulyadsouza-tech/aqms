@@ -8,18 +8,22 @@ This directory contains the production security rules and schema definitions for
 
 ```
 /
+├── admins/
+│   └── {uid}/                      # Boolean true for Firebase-authenticated administrators
 ├── config/
 │   ├── branding/                  # College logo URL, titles, campus location
 │   ├── sensors/                   # Per-sensor hardware model, units, calibrations
 │   ├── aqi/                       # CPCB India breakpoints, thresholds
-│   └── site/                      # Retention policies, offline timeouts
+│   ├── site/                      # Retention policies, offline timeouts
+│   └── activeDeviceId/            # Device currently displayed by the dashboard
 │
 ├── devices/
-│   └── {deviceId}/                # e.g., "SJEC-AQMS-ESP32-001"
-│       ├── metadata/              # Hardware profile, radio model, pin mappings
+│   └── {deviceId}/                # Actual configured hardware ID
+│       ├── metadata/              # Non-secret hardware and connection configuration
+│       ├── private/               # Admin-only device token hash
 │       ├── status/                # Live connection state, packet counts
 │       ├── latest/                # Latest valid telemetry packet (read by dashboard)
-│       └── history/               # Time-indexed historical telemetry records
+│       └── history/               # Actual hardware and manual historical records
 │           └── {readingId}        # Ingested packet with server timestamp
 │
 └── public/
@@ -30,22 +34,18 @@ This directory contains the production security rules and schema definitions for
 
 ## 2. Deploying Security Rules
 
-Install the Firebase CLI and login:
+The root `firebase.json` points the Realtime Database rules at `database.rules.json` and Functions at `functions/`.
+
+Install the Firebase CLI, select the existing project, install Functions dependencies, and deploy:
 ```bash
 npm install -g firebase-tools
 firebase login
-firebase init database
-firebase init storage
+firebase use --add
+npm --prefix functions install
+npm --prefix functions run build
+firebase deploy --only database,functions
 ```
-
-Deploy rules using the Firebase CLI:
-```bash
-# Deploy Realtime Database rules
-firebase deploy --only database
-
-# Deploy Storage rules
-firebase deploy --only storage
-```
+The Function uses the Firebase Admin SDK's deployed service identity; no service-account key belongs in the React app. The scheduled history cleanup requires a billing-enabled project with Cloud Scheduler available.
 
 ---
 
@@ -56,6 +56,15 @@ To prevent unauthorized public access, public registration is **disabled**. Crea
 1. Open the [Firebase Console](https://console.firebase.google.com/).
 2. Select your project -> **Authentication** -> **Users** tab.
 3. Click **Add user**.
-4. Enter an administrative email (e.g., `admin@sjec.ac.in`) and a strong password (minimum 12 characters).
+4. Enter the administrator email and a strong password.
 5. Click **Add user**.
-6. Navigate to the web app (`/admin`) and log in with these credentials.
+6. Copy the user's UID and, in Realtime Database, set `/admins/{uid}` to boolean `true` using the Firebase Console. Rules intentionally deny client writes to `/admins`.
+7. Navigate to `/admin` and log in with that account. Any client-side Firebase write requires this enrolled UID.
+
+## Device Ingestion
+
+The admin page stores public device metadata and a SHA-256 hash of the generated device token at `/devices/{deviceId}/private/deviceTokenHash`. The plaintext token remains in the admin page's memory only and must be provisioned to the physical device. Wi-Fi passwords are never written to Firebase.
+
+The HTTPS Function requires an existing enabled device registration and a matching per-device token. It writes each validated packet to `/devices/{deviceId}/latest` and appends `/history/{recordId}` at the reporting interval saved in device metadata. Public clients can read telemetry but cannot write it unless their authenticated UID is listed in `/admins`.
+
+Configure the Vite Firebase Web SDK values in the deployment environment, including the existing project's API key, Auth domain, Realtime Database URL, project ID, and app ID. Enable Firebase Email/Password Authentication. Do not put Admin SDK credentials in frontend environment variables.

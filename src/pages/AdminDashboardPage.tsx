@@ -13,10 +13,12 @@ import {
   subscribeToBranding, 
   subscribeToDeviceMetadata, 
   subscribeToLatestReading, 
-  fetchHistoricalReadings
+  subscribeToActiveDeviceId,
+  subscribeToHistoricalReadings
 } from '../services/firebase';
-import { DEMO_DEVICE_METADATA, generateDemoHistoricalData, generateDemoReading } from '../services/demoData';
+import { deviceConnection } from '../services/deviceConnection';
 import { Header } from '../components/common/Header';
+import { Footer } from '../components/common/Footer';
 import { DeviceSetupTab } from '../features/admin/DeviceSetupTab';
 import { FirebaseConfigTab } from '../features/admin/FirebaseConfigTab';
 import { BrandingTab } from '../features/admin/BrandingTab';
@@ -57,42 +59,68 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
 
   // System states
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
-  const [metadata, setMetadata] = useState<DeviceMetadata | null>(DEMO_DEVICE_METADATA);
+  const [metadata, setMetadata] = useState<DeviceMetadata | null>(null);
   const [latestReading, setLatestReading] = useState<IngestedReading | null>(null);
   const [historicalData, setHistoricalData] = useState<IngestedReading[]>([]);
   const [systemSettings] = useState<SystemSettings>(DEFAULT_SYSTEM_SETTINGS);
-  const [isDemoMode] = useState<boolean>(!isFirebaseConfigured);
-
-  const activeDeviceId = metadata?.deviceId || 'SJEC-AQMS-ESP32-001';
+  const [isDemoMode] = useState<boolean>(false);
+  const [activeDeviceId, setActiveDeviceId] = useState<string>('');
+  const [now, setNow] = useState<number>(Date.now());
 
   // Subscriptions
   useEffect(() => {
     const unsubBrand = subscribeToBranding(setBranding);
+    return () => unsubBrand();
+  }, []);
+
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const unsubActive = subscribeToActiveDeviceId((id) => {
+      setActiveDeviceId(id || '');
+    });
+    return () => unsubActive();
+  }, []);
+
+  useEffect(() => {
+    setMetadata(null);
+    setLatestReading(null);
+    setHistoricalData([]);
+    if (!activeDeviceId) {
+      return;
+    }
 
     let unsubMeta = () => {};
     let unsubReading = () => {};
+    let unsubHistory = () => {};
 
-    if (!isDemoMode && isFirebaseConfigured) {
+    if (isFirebaseConfigured) {
       unsubMeta = subscribeToDeviceMetadata(activeDeviceId, setMetadata);
       unsubReading = subscribeToLatestReading(activeDeviceId, setLatestReading);
-      fetchHistoricalReadings(activeDeviceId, 150).then(setHistoricalData);
-    } else {
-      setLatestReading(generateDemoReading());
-      setHistoricalData(generateDemoHistoricalData(24));
+      unsubHistory = subscribeToHistoricalReadings(activeDeviceId, 150, setHistoricalData, () => setHistoricalData([]));
     }
 
+    const unsubWs = deviceConnection.subscribeReading((live) => {
+      if (!activeDeviceId || live.deviceId === activeDeviceId) {
+        setLatestReading(live);
+      }
+    });
+
     return () => {
-      unsubBrand();
       unsubMeta();
       unsubReading();
+      unsubHistory();
+      unsubWs();
     };
-  }, [isDemoMode, activeDeviceId]);
+  }, [activeDeviceId]);
 
   // Online check
-  const now = Date.now();
   const timeoutSec = metadata?.offlineTimeoutSeconds || systemSettings.deviceOfflineTimeoutSeconds;
   const isOnline = Boolean(
-    latestReading && (now - latestReading.timestamp) / 1000 <= timeoutSec
+    latestReading && latestReading.source !== 'manual' && (now - latestReading.timestamp) / 1000 <= timeoutSec
   );
 
   const handleLogoutClick = async () => {
@@ -255,9 +283,9 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
             <AdminAccountsTab />
           )}
         </main>
-
       </div>
 
+      <Footer onNavigateAdmin={() => {}} />
     </div>
   );
 };

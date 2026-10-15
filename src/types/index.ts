@@ -42,6 +42,8 @@ export interface DevicePayload {
 export interface IngestedReading extends DevicePayload {
   id?: string;
   serverReceivedAt: number; // Server-side epoch ms
+  source?: 'hardware' | 'manual' | 'websocket' | string;
+  recordedBy?: string; // Authenticated admin email if source === 'manual'
 }
 
 export type SensorCardStatus = 
@@ -95,6 +97,35 @@ export interface DeviceMetadata {
   apiKeyHash?: string; // Hashed token for device auth
   createdAt: number;
   updatedAt: number;
+
+  // Dynamic connection fields (non-secret only)
+  ipAddress?: string;
+  wsUrl?: string;
+  ingestionUrl?: string;
+  ingestionRootCa?: string;
+  port?: number | string;
+  path?: string;
+  wifiSsid?: string; // Non-secret SSID (passwords are NEVER stored here)
+
+  // Hardware LoRa parameters
+  loraFrequencyMhz?: string;
+  loraSpreadingFactor?: number | string;
+  loraBandwidthKhz?: number | string;
+  loraCodingRate?: string;
+  loraSyncWord?: string;
+}
+
+export interface ManualReadingInput {
+  deviceId: string;
+  pm1_0?: number | null;
+  pm2_5?: number | null;
+  pm10?: number | null;
+  mq3_raw?: number | null;
+  temperature_c?: number | null;
+  humidity_percent?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  notes?: string;
 }
 
 export interface DeviceLiveStatus {
