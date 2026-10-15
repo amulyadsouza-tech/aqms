@@ -21,10 +21,6 @@
 | **🌐 Production Live App** | [👉 https://aqms-phi.vercel.app| 🟢 Active |
 | **📁 GitHub Repository** | [github.com/amulyadsouza-tech/aqms](https://github.com/amulyadsouza-tech/aqms) | 🟢 Main |
 
-> 💡 *Replace `YOUR_DEPLOYED_URL_HERE` above with your live Firebase Hosting, Vercel, or Netlify production link.*
-
----
-
 ## ✨ Key Features
 
 - **CPCB NAQI Standard Gauge**: Computes real-time Indian National Air Quality Index (Good, Satisfactory, Moderate, Poor, Very Poor, Severe) with active pollutant identification.
