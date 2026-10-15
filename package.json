@@ -1,7 +1,8 @@
 {
   "name": "sjec-aqms",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.6.0",
+  "description": "SJEC Air Quality Monitoring System - Institutional Real-Time Environmental Sensing & Analytics Platform",
   "type": "module",
   "scripts": {
     "dev": "vite",
