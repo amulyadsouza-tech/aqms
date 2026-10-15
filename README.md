@@ -18,7 +18,7 @@
 
 | Environment | Link | Status |
 | :--- | :--- | :--- |
-| **🌐 Production Live App** | [👉 Add Your Deployed Link Here (e.g. https://sjec-aqms.web.app)](YOUR_DEPLOYED_URL_HERE) | 🟢 Active |
+| **🌐 Production Live App** | [👉 https://aqms-flcyz6o6u-amulyadsouza-techs-projects.vercel.app](YOUR_DEPLOYED_URL_HERE) | 🟢 Active |
 | **🔐 Admin Console** | [👉 /admin](YOUR_DEPLOYED_URL_HERE/admin) | 🔒 Auth Required |
 | **📁 GitHub Repository** | [github.com/amulyadsouza-tech/aqms](https://github.com/amulyadsouza-tech/aqms) | 🟢 Main |
 
