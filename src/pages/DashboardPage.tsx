@@ -28,6 +28,8 @@ import {
 } from '../components/sensors/MetricCards';
 import { HistoricalCharts } from '../components/charts/HistoricalCharts';
 import { DeviceStatusCard } from '../components/devices/DeviceStatusCard';
+import { WebSocketStatusBar } from '../components/common/WebSocketStatusBar';
+import { deviceConnection } from '../services/deviceConnection';
 import { Info, RefreshCw, Wind } from 'lucide-react';
 
 interface DashboardPageProps {
@@ -88,6 +90,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
   }, [activeDeviceId]);
 
   useEffect(() => {
+    const unsubWs = deviceConnection.subscribeReading((live) => {
+      setLatestReading(live);
+      setIsDemoMode(false);
+      setHistoricalData((prev) => {
+        const next = [...prev, live];
+        return next.length > 200 ? next.slice(next.length - 200) : next;
+      });
+      setIsLoadingHistory(false);
+    });
+    return () => unsubWs();
+  }, []);
+
+  useEffect(() => {
     setIsLoadingHistory(true);
     if (!activeDeviceId || !isFirebaseConfigured) {
       setHistoricalData([]);
@@ -114,12 +129,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
   const offlineTimeout = metadata?.offlineTimeoutSeconds || DEFAULT_SYSTEM_SETTINGS.deviceOfflineTimeoutSeconds;
   const staleThreshold = DEFAULT_SYSTEM_SETTINGS.staleDataThresholdSeconds;
   const dashboardReading = latestReading?.source === 'manual' ? null : latestReading;
-  const readingAgeSec = dashboardReading?.timestamp
-    ? Math.max(0, Math.floor((now - dashboardReading.timestamp) / 1000))
+  // Use serverReceivedAt as the age reference — it's always Date.now() at ingest,
+  // so millis()-based firmware timestamps don't make readings appear ancient.
+  const readingRef = dashboardReading
+    ? (dashboardReading.serverReceivedAt || dashboardReading.timestamp)
+    : 0;
+  const readingAgeSec = readingRef
+    ? Math.max(0, Math.floor((now - readingRef) / 1000))
     : Infinity;
-  const isDeviceOnline = Boolean(dashboardReading && readingAgeSec <= offlineTimeout);
-  const isDataStale = Boolean(dashboardReading && readingAgeSec > staleThreshold && readingAgeSec <= offlineTimeout);
-  const isDeviceOffline = Boolean(!dashboardReading || readingAgeSec > offlineTimeout);
+  const isWsConnected = deviceConnection.getState().status === 'connected';
+  const isDeviceOnline = Boolean(dashboardReading && (isWsConnected || readingAgeSec <= offlineTimeout));
+  const isDataStale = Boolean(dashboardReading && !isWsConnected && readingAgeSec > staleThreshold && readingAgeSec <= offlineTimeout);
+  const isDeviceOffline = Boolean(!dashboardReading || (!isWsConnected && readingAgeSec > offlineTimeout));
   const sensors = dashboardReading?.sensors;
   const gps = dashboardReading?.gps;
   const sensorStatus = (value: number | null | undefined) =>
@@ -164,6 +185,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({ onNavigateAdmin })
             )}
           </div>
         )}
+
+        <WebSocketStatusBar />
 
         <section aria-labelledby="aqi-section-heading">
           <h2 id="aqi-section-heading" className="sr-only">Air Quality Index</h2>

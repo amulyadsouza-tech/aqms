@@ -117,10 +117,17 @@ export const AdminDashboardPage: React.FC<AdminDashboardPageProps> = ({
     };
   }, [activeDeviceId]);
 
-  // Online check
+  // Online check — use serverReceivedAt (always Date.now() at ingest) as the
+  // age reference so that millis()-based firmware timestamps don't break this.
   const timeoutSec = metadata?.offlineTimeoutSeconds || systemSettings.deviceOfflineTimeoutSeconds;
+  const isWsConnected = deviceConnection.getState().status === 'connected';
+  const readingTs = latestReading
+    ? (latestReading.serverReceivedAt || latestReading.timestamp)
+    : 0;
   const isOnline = Boolean(
-    latestReading && latestReading.source !== 'manual' && (now - latestReading.timestamp) / 1000 <= timeoutSec
+    latestReading &&
+    latestReading.source !== 'manual' &&
+    (isWsConnected || (now - readingTs) / 1000 <= timeoutSec)
   );
 
   const handleLogoutClick = async () => {

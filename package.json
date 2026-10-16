@@ -8,14 +8,22 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "relay": "node server/relay.js",
+    "bridge": "node scripts/ground-bridge.js",
+    "bridge:sim": "node scripts/ground-bridge.js --simulate"
   },
   "dependencies": {
+    "@firebase/auth": "^1.13.7",
+    "@firebase/database": "^1.1.5",
+    "@firebase/storage": "^0.14.6",
     "clsx": "^2.1.1",
     "firebase": "^10.14.1",
     "lucide-react": "^0.460.0",
     "recharts": "^2.13.3",
-    "tailwind-merge": "^2.5.4"
+    "serialport": "^13.0.0",
+    "tailwind-merge": "^2.5.4",
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@types/node": "^22.9.0",

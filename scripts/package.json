@@ -1,0 +1,15 @@
+{
+  "name": "aqms-ground-bridge",
+  "version": "1.0.0",
+  "description": "Reads ESP32 LoRa Ground Station Serial data and bridges to WebSocket",
+  "main": "ground-bridge.js",
+  "type": "module",
+  "scripts": {
+    "start": "node ground-bridge.js",
+    "test-sim": "node ground-bridge.js --simulate"
+  },
+  "dependencies": {
+    "serialport": "^12.0.0",
+    "ws": "^8.22.0"
+  }
+}

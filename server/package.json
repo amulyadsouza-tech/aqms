@@ -1,0 +1,13 @@
+{
+  "name": "aqms-websocket-relay",
+  "version": "1.0.0",
+  "description": "Real-time WebSocket Relay Server for SJEC Air Quality Monitoring System",
+  "main": "relay.js",
+  "type": "module",
+  "scripts": {
+    "start": "node relay.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

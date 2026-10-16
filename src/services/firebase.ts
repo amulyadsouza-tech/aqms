@@ -388,8 +388,11 @@ export function validateAndParseSensorMessage(
 
   const now = Date.now();
   const rawTimestamp = message.timestamp;
+  // Accept only plausible Unix timestamps (after 2020-01-01). millis() uptime
+  // values (small numbers like 5000) are treated as missing → server uses Date.now().
+  const MIN_VALID_TS = 1577836800000; // 2020-01-01 00:00:00 UTC in ms
   const timestamp =
-    typeof rawTimestamp === 'number' && Number.isFinite(rawTimestamp) && rawTimestamp > 0
+    typeof rawTimestamp === 'number' && Number.isFinite(rawTimestamp) && rawTimestamp >= MIN_VALID_TS
       ? rawTimestamp
       : now;
 

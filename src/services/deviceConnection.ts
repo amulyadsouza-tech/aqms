@@ -117,6 +117,18 @@ class DeviceConnectionManager {
         onStatus: (wsStatus) => {
           if (wsStatus === 'connected') {
             this.setStatus('connected', null);
+            // If connecting to an HTTP-capable relay, fetch latest cached reading immediately
+            if (cleanUrl.startsWith('ws://') || cleanUrl.startsWith('wss://')) {
+              const httpUrl = cleanUrl.replace(/^ws/i, 'http');
+              fetch(`${httpUrl}/latest`)
+                .then((r) => (r.ok ? r.json() : null))
+                .then((cached) => {
+                  if (cached && cached.deviceId && cached.sensors) {
+                    this.handleIncomingRaw(cached);
+                  }
+                })
+                .catch(() => undefined);
+            }
           } else if (wsStatus === 'connecting') {
             this.setStatus('connecting', null);
           } else {
