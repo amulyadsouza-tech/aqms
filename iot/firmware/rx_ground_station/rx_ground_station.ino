@@ -53,9 +53,14 @@ void onWsEvent(uint8_t clientNum, WStype_t type, uint8_t* payload, size_t length
     case WStype_DISCONNECTED:
       Serial.printf("🔌 [WebSocket] Client #%u disconnected\n", clientNum);
       break;
-    case WStype_TEXT:
-      // We only push data — ignore any incoming text from browser
+    case WStype_TEXT: {
+      String msg = String((char*)payload);
+      msg.trim();
+      if (msg == "ping" || msg.indexOf("\"ping\"") >= 0) {
+        webSocket.sendTXT(clientNum, "{\"type\":\"pong\",\"pong\":true}");
+      }
       break;
+    }
     default:
       break;
   }

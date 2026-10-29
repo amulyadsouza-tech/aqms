@@ -6,7 +6,7 @@
  */
 
 import { IngestedReading } from '../types';
-import { connectAQMSWebSocket, AQMSWebSocketHandle } from './aqmsWebSocket';
+import { connectAQMSWebSocket, AQMSWebSocketHandle, normalizeWsUrl } from './aqmsWebSocket';
 import { saveIncomingReading, validateAndParseSensorMessage } from './firebase';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
@@ -18,6 +18,7 @@ export interface ConnectionState {
   packetsReceived: number;
   lastPacketTimestamp: number | null;
   latestReading: IngestedReading | null;
+  latencyMs: number | null;
 }
 
 type StatusListener = (status: ConnectionStatus, error: string | null) => void;
@@ -33,6 +34,7 @@ class DeviceConnectionManager {
   private packetCount: number = 0;
   private lastPacketTime: number | null = null;
   private latestReading: IngestedReading | null = null;
+  private latencyMs: number | null = null;
 
   private statusListeners: Set<StatusListener> = new Set();
   private readingListeners: Set<ReadingListener> = new Set();
@@ -48,6 +50,7 @@ class DeviceConnectionManager {
       packetsReceived: this.packetCount,
       lastPacketTimestamp: this.lastPacketTime,
       latestReading: this.latestReading,
+      latencyMs: this.latencyMs,
     };
   }
 
@@ -78,6 +81,9 @@ class DeviceConnectionManager {
   private setStatus(status: ConnectionStatus, error: string | null = null) {
     this.status = status;
     this.lastError = error;
+    if (status !== 'connected') {
+      this.latencyMs = null;
+    }
     this.statusListeners.forEach((fn) => fn(status, error));
   }
 
@@ -142,6 +148,11 @@ class DeviceConnectionManager {
         onReading: (rawMessage) => {
           this.handleIncomingRaw(rawMessage);
         },
+        onLatency: (ms) => {
+          this.latencyMs = ms;
+          // Notify listeners so UI updates latency in real-time
+          this.statusListeners.forEach((fn) => fn(this.status, this.lastError));
+        },
       });
     } catch (err: any) {
       this.setStatus('error', err?.message || 'Failed to initialize WebSocket client.');
@@ -157,12 +168,13 @@ class DeviceConnectionManager {
       this.activeHandle = null;
     }
     this.currentUrl = null;
+    this.latencyMs = null;
     this.setStatus('disconnected', null);
   }
 
   /**
    * Test reachability of a WebSocket or HTTP device endpoint.
-   * Does NOT fabricate success.
+   * Does NOT fabricate success. Supports bare IP addresses with Nexathon URL normalizer.
    */
   async testConnection(targetUrlOrIp: string): Promise<{
     success: boolean;
@@ -176,109 +188,98 @@ class DeviceConnectionManager {
     const input = targetUrlOrIp.trim();
     const startTime = performance.now();
 
-    if (/^wss?:\/\//i.test(input)) {
-      return new Promise((resolve) => {
-        let finished = false;
-        let testWs: WebSocket | null = null;
-        const timer = setTimeout(() => {
+    // Check if it's an HTTP URL test
+    if (/^https?:\/\//i.test(input)) {
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 4000);
+
+        const resp = await fetch(input, {
+          method: 'GET',
+          mode: 'cors',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+        const latencyMs = Math.round(performance.now() - startTime);
+        if (!resp.ok) {
+          return {
+            success: false,
+            message: `Endpoint responded with HTTP ${resp.status}.`,
+            latencyMs,
+          };
+        }
+        return {
+          success: true,
+          message: `Endpoint returned HTTP ${resp.status} in ${latencyMs}ms.`,
+          latencyMs,
+        };
+      } catch (err: any) {
+        if (err.name === 'AbortError') {
+          return {
+            success: false,
+            message: 'Connection timed out. Device IP is unreachable or unresponsive.',
+          };
+        }
+        return {
+          success: false,
+          message: `Failed to reach device: ${err?.message || 'Network unreachable'}`,
+        };
+      }
+    }
+
+    // Otherwise, treat as WebSocket target (raw IP or ws:// URL)
+    return new Promise((resolve) => {
+      let finished = false;
+      let testWs: WebSocket | null = null;
+      const timer = setTimeout(() => {
+        if (finished) return;
+        finished = true;
+        if (testWs) {
+          testWs.onopen = null;
+          testWs.onerror = null;
+          testWs.close();
+        }
+        resolve({
+          success: false,
+          message: `Connection test timed out after 5000ms. Verify device is online and port is open.`,
+        });
+      }, 5000);
+
+      try {
+        const resolvedUrl = normalizeWsUrl(input);
+
+        testWs = new WebSocket(resolvedUrl);
+        testWs.onopen = () => {
           if (finished) return;
           finished = true;
-          if (testWs) {
-            testWs.onopen = null;
-            testWs.onerror = null;
-            testWs.close();
-          }
+          clearTimeout(timer);
+          const latencyMs = Math.max(1, Math.round(performance.now() - startTime));
+          testWs?.close();
           resolve({
-            success: false,
-            message: `Connection test timed out after 5000ms. Verify device is online and port is open.`,
+            success: true,
+            message: `Handshake successful! WebSocket responded in ${latencyMs}ms.`,
+            latencyMs,
           });
-        }, 5000);
+        };
 
-        try {
-          const parsedUrl = new URL(input);
-          if (!['ws:', 'wss:'].includes(parsedUrl.protocol)) {
-            throw new Error('Enter a valid WebSocket URL.');
-          }
-          if (window.location.protocol === 'https:' && parsedUrl.protocol !== 'wss:') {
-            throw new Error('HTTPS websites require a secure WSS connection.');
-          }
-
-          testWs = new WebSocket(parsedUrl.href);
-          testWs.onopen = () => {
-            if (finished) return;
-            finished = true;
-            clearTimeout(timer);
-            const latencyMs = Math.round(performance.now() - startTime);
-            testWs?.close();
-            resolve({
-              success: true,
-              message: `Handshake successful! WebSocket responded in ${latencyMs}ms.`,
-              latencyMs,
-            });
-          };
-
-          testWs.onerror = () => {
-            if (finished) return;
-            finished = true;
-            clearTimeout(timer);
-            resolve({
-              success: false,
-              message: `WebSocket handshake failed. Check URL, IP address, and gateway port.`,
-            });
-          };
-        } catch (e: any) {
+        testWs.onerror = () => {
+          if (finished) return;
+          finished = true;
           clearTimeout(timer);
           resolve({
             success: false,
-            message: `Invalid WebSocket URL: ${e?.message || 'Malformed address'}`,
+            message: `WebSocket handshake failed. Check URL, IP address, and gateway port.`,
           });
-        }
-      });
-    }
-
-    if (!/^https?:\/\//i.test(input)) {
-      return {
-        success: false,
-        message: 'Enter the actual WebSocket URL, or a complete HTTP(S) health-check URL. A browser cannot reliably probe a bare IP address.',
-      };
-    }
-
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 4000);
-
-      const resp = await fetch(input, {
-        method: 'GET',
-        mode: 'cors',
-        signal: controller.signal,
-      });
-
-      clearTimeout(timeoutId);
-      const latencyMs = Math.round(performance.now() - startTime);
-      if (!resp.ok) {
-        return {
-          success: false,
-          message: `Endpoint responded with HTTP ${resp.status}.`,
-          latencyMs,
         };
-      }
-      return {
-        success: true,
-        message: `Endpoint returned HTTP ${resp.status} in ${latencyMs}ms.`,
-        latencyMs,
-      };
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        return {
+      } catch (e: any) {
+        clearTimeout(timer);
+        resolve({
           success: false,
-          message: 'Connection timed out. Device IP is unreachable or unresponsive.',
-        };
+          message: `Invalid WebSocket address: ${e?.message || 'Malformed address'}`,
+        });
       }
-      return {
-        success: false,
-        message: `Failed to reach device: ${err?.message || 'Network unreachable'}`,
-      };
-    }
+    });
   }
 
   /**

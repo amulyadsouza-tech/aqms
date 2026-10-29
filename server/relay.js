@@ -83,8 +83,19 @@ wss.on('connection', (ws, req) => {
   }
 
   ws.on('message', (data) => {
+    const raw = data.toString().trim();
+    if (raw === 'ping') {
+      ws.send(JSON.stringify({ type: 'pong', pong: true, timestamp: Date.now() }));
+      return;
+    }
+
     try {
-      const message = JSON.parse(data.toString());
+      const message = JSON.parse(raw);
+
+      if (message && (message.type === 'ping' || message.ping === true)) {
+        ws.send(JSON.stringify({ type: 'pong', pong: true, timestamp: Date.now() }));
+        return;
+      }
 
       // Validate that it looks like an AQMS sensor packet
       if (message && message.deviceId && message.sensors) {
@@ -105,11 +116,9 @@ wss.on('connection', (ws, req) => {
             client.send(payloadStr);
           }
         }
-      } else if (message.type === 'ping') {
-        ws.send(JSON.stringify({ type: 'pong', timestamp: Date.now() }));
       }
     } catch (err) {
-      console.warn('[Relay] Received non-JSON or invalid message:', data.toString());
+      console.warn('[Relay] Received non-JSON or invalid message:', raw);
     }
   });
 

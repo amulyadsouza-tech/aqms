@@ -152,7 +152,6 @@ export const DeviceSetupTab: React.FC<DeviceSetupTabProps> = ({
     return () => {
       unsubStatus();
       unsubReading();
-      deviceConnection.disconnect();
     };
   }, []);
 

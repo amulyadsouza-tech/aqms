@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Radio, WifiOff, Activity, Settings2 } from 'lucide-react';
+import { Zap, WifiOff, RefreshCw, Radio } from 'lucide-react';
 import { deviceConnection, ConnectionState } from '../../services/deviceConnection';
+import { normalizeWsUrl } from '../../services/aqmsWebSocket';
 
 interface WebSocketStatusBarProps {
   onPacketReceived?: () => void;
@@ -8,14 +9,15 @@ interface WebSocketStatusBarProps {
 
 export const WebSocketStatusBar: React.FC<WebSocketStatusBarProps> = ({ onPacketReceived }) => {
   const [connState, setConnState] = useState<ConnectionState>(deviceConnection.getState());
-  const [isOpen, setIsOpen] = useState(false);
-  const [inputUrl, setInputUrl] = useState(() => {
-    return (
-      localStorage.getItem('aqms_ws_url') ||
-      (window.location.protocol === 'https:'
-        ? 'wss://your-aqms-relay.onrender.com'
-        : 'ws://localhost:8080')
-    );
+  const [ipAddress, setIpAddress] = useState<string>(() => {
+    const saved = localStorage.getItem('aqms_robot_ip');
+    if (saved) return saved;
+    const oldUrl = localStorage.getItem('aqms_ws_url');
+    if (oldUrl) {
+      return oldUrl.replace(/^wss?:\/\//i, '').replace(/:\d+.*$/, '').replace(/\/.*$/, '');
+    }
+    // Default to the current ESP32 network IP address
+    return '10.245.210.144';
   });
   const [autoConnected, setAutoConnected] = useState(false);
 
@@ -28,16 +30,17 @@ export const WebSocketStatusBar: React.FC<WebSocketStatusBarProps> = ({ onPacket
       onPacketReceived?.();
     });
 
-    // Auto-connect on initial load if saved URL exists or local dev
+    // Auto-connect on page load if saved IP exists
     if (!autoConnected) {
       setAutoConnected(true);
-      const savedUrl = localStorage.getItem('aqms_ws_url');
-      const defaultUrl = window.location.protocol === 'https:'
-        ? savedUrl || ''
-        : savedUrl || 'ws://localhost:8080';
-
-      if (defaultUrl) {
-        deviceConnection.connect({ url: defaultUrl });
+      const targetIp = localStorage.getItem('aqms_robot_ip') || '10.245.210.144';
+      if (targetIp && targetIp.trim()) {
+        try {
+          const resolved = normalizeWsUrl(targetIp.trim(), 81);
+          deviceConnection.connect({ url: resolved });
+        } catch {
+          // ignore
+        }
       }
     }
 
@@ -47,17 +50,35 @@ export const WebSocketStatusBar: React.FC<WebSocketStatusBarProps> = ({ onPacket
     };
   }, [autoConnected, onPacketReceived]);
 
-  const handleConnect = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputUrl.trim()) return;
-
-    localStorage.setItem('aqms_ws_url', inputUrl.trim());
-    deviceConnection.connect({ url: inputUrl.trim() });
-    setIsOpen(false);
+  // Clean and set IP input (strips any accidental ws://, http://, ports, or slashes)
+  const handleIpChange = (val: string) => {
+    let clean = val.trim();
+    // Strip protocols if pasted
+    clean = clean.replace(/^wss?:\/\//i, '').replace(/^https?:\/\//i, '');
+    // Strip trailing slashes
+    clean = clean.replace(/\/.*$/, '');
+    // If user pasted port e.g. 10.245.210.144:81, keep it clean
+    if (clean.includes(':')) {
+      const parts = clean.split(':');
+      clean = parts[0];
+    }
+    setIpAddress(clean);
   };
 
-  const handleDisconnect = () => {
-    deviceConnection.disconnect();
+  const toggleConnection = () => {
+    if (isConnected) {
+      deviceConnection.disconnect();
+    } else {
+      const clean = ipAddress.trim() || '10.245.210.144';
+      localStorage.setItem('aqms_robot_ip', clean);
+      try {
+        const resolved = normalizeWsUrl(clean, 81);
+        localStorage.setItem('aqms_ws_url', resolved);
+        deviceConnection.connect({ url: resolved });
+      } catch (err: any) {
+        alert(err?.message || 'Invalid IP address.');
+      }
+    }
   };
 
   const isConnected = connState.status === 'connected';
@@ -65,139 +86,113 @@ export const WebSocketStatusBar: React.FC<WebSocketStatusBarProps> = ({ onPacket
   const isError = connState.status === 'error';
 
   return (
-    <div className="w-full bg-white/90 dark:bg-[#151515]/90 backdrop-blur-md rounded-2xl border border-sky-200/80 dark:border-[#303030] shadow-sm p-4 transition-all">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
-        {/* Left: Indicator & Connection status */}
-        <div className="flex items-center gap-3">
-          <div
-            className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 transition-colors ${
+    <div className="w-full bg-[#0a0f1d]/90 dark:bg-[#060911]/90 backdrop-blur-md rounded-2xl border border-white/10 shadow-lg p-3 sm:p-4 transition-all mb-4 text-white">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-4">
+        
+        {/* Left: Nexathon Connection Manager Bar */}
+        <div className="flex flex-1 items-center gap-2 max-w-xl">
+          <div className="flex items-center flex-1 bg-black/40 border border-white/10 rounded-full px-3.5 py-1.5 font-mono text-xs text-slate-300 focus-within:border-[#7c6df0] focus-within:ring-2 focus-within:ring-[#7c6df0]/30 transition-all shadow-inner">
+            <span className="text-slate-500 select-none font-semibold">ws://</span>
+            <input
+              type="text"
+              id="robotIpInput"
+              value={ipAddress}
+              onChange={(e) => handleIpChange(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && toggleConnection()}
+              placeholder="Robot IP (e.g. 10.245.210.144)"
+              spellCheck={false}
+              autoComplete="off"
+              className="w-full bg-transparent border-none outline-none text-white px-2 font-mono text-xs placeholder:text-slate-600"
+            />
+            <span className="text-slate-500 select-none font-semibold">:81</span>
+          </div>
+
+          {/* Nexathon-style Connect / Disconnect button */}
+          <button
+            id="connectBtn"
+            onClick={toggleConnection}
+            disabled={isConnecting}
+            className={`inline-flex items-center justify-center gap-2 px-5 py-2 rounded-full font-bold text-xs tracking-wide transition-all shadow-sm cursor-pointer select-none whitespace-nowrap ${
               isConnected
-                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300'
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30'
                 : isConnecting
-                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/70 dark:text-amber-300 animate-pulse'
-                : isError
-                ? 'bg-red-100 text-red-700 dark:bg-red-950/70 dark:text-red-300'
-                : 'bg-slate-100 text-slate-500 dark:bg-neutral-800 dark:text-slate-400'
+                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-wait'
+                : 'bg-[#7c6df0] hover:bg-[#6d5ceb] text-white shadow-[0_0_15px_rgba(124,109,240,0.4)] hover:-translate-y-0.5'
             }`}
           >
-            {isConnected ? (
-              <Radio className="w-5 h-5 animate-pulse" />
-            ) : isConnecting ? (
-              <Activity className="w-5 h-5 animate-spin" />
-            ) : (
-              <WifiOff className="w-5 h-5" />
-            )}
-          </div>
-
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="font-extrabold text-sm text-[#24272D] dark:text-white">
-                LoRa Ground Station Live WebSocket
-              </span>
-              <span
-                className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold ${
-                  isConnected
-                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
-                    : isConnecting
-                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
-                    : 'bg-slate-100 text-slate-700 dark:bg-neutral-800 dark:text-slate-300 border border-slate-300 dark:border-neutral-700'
-                }`}
-              >
-                {isConnected ? 'LIVE STREAMING' : isConnecting ? 'CONNECTING...' : 'DISCONNECTED'}
-              </span>
-            </div>
-
-            <p className="text-xs text-[#687583] dark:text-[#A0A0A0] font-mono mt-0.5 truncate max-w-md">
-              {connState.url ? connState.url : 'No WebSocket server connected.'}
-              {connState.error && (
-                <span className="text-red-500 ml-2">({connState.error})</span>
-              )}
-            </p>
-          </div>
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnected
+                  ? 'bg-emerald-400 shadow-[0_0_8px_#34d399]'
+                  : isConnecting
+                  ? 'bg-amber-400 animate-ping'
+                  : 'bg-white'
+              }`}
+            />
+            <span className="btn-label">
+              {isConnected ? 'Disconnect' : isConnecting ? 'Connecting...' : 'Connect'}
+            </span>
+          </button>
         </div>
 
-        {/* Right: Metrics & Controls */}
-        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+        {/* Right: Nexathon-style Status Pills */}
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* WebSocket Status Pill */}
+          <div
+            id="wsPill"
+            className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full text-xs font-semibold border backdrop-blur-sm transition-all ${
+              isConnected
+                ? 'bg-emerald-950/40 text-emerald-200 border-emerald-500/30'
+                : isConnecting
+                ? 'bg-amber-950/40 text-amber-200 border-amber-500/30 animate-pulse'
+                : isError
+                ? 'bg-red-950/40 text-red-200 border-red-500/30'
+                : 'bg-white/5 text-slate-400 border-white/10'
+            }`}
+          >
+            <span
+              className={`w-2 h-2 rounded-full ${
+                isConnected
+                  ? 'bg-emerald-400 shadow-[0_0_10px_#34d399]'
+                  : isConnecting
+                  ? 'bg-amber-400'
+                  : isError
+                  ? 'bg-red-400'
+                  : 'bg-slate-600'
+              }`}
+            />
+            <span id="wsStatusText">
+              {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : isError ? 'Offline (Error)' : 'Disconnected'}
+            </span>
+          </div>
+
+          {/* Latency Pill (Realtime roundtrip ping) */}
+          <div className="inline-flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-full text-xs font-mono font-medium text-slate-300">
+            <Zap className="w-3.5 h-3.5 text-amber-400 fill-amber-400" />
+            <span id="latencyText">
+              {isConnected && connState.latencyMs != null ? `${connState.latencyMs} ms` : '-- ms'}
+            </span>
+          </div>
+
+          {/* Live Packet Counter */}
           {isConnected && (
-            <div className="flex items-center gap-2 text-xs font-mono bg-sky-50 dark:bg-neutral-800/80 border border-sky-100 dark:border-[#303030] px-3 py-1.5 rounded-xl">
-              <span className="text-sky-700 dark:text-sky-300 font-bold">
-                Packets: {connState.packetsReceived}
-              </span>
-              {connState.latestReading?.connectivity?.rssi_dbm != null && (
-                <span className="text-[#687583] dark:text-slate-400 border-l border-slate-200 dark:border-neutral-700 pl-2">
-                  RSSI: {connState.latestReading.connectivity.rssi_dbm} dBm
-                </span>
-              )}
-              {connState.latestReading?.connectivity?.snr_db != null && (
-                <span className="text-[#687583] dark:text-slate-400 border-l border-slate-200 dark:border-neutral-700 pl-2">
-                  SNR: {connState.latestReading.connectivity.snr_db} dB
-                </span>
-              )}
+            <div className="inline-flex items-center gap-1.5 bg-sky-950/40 border border-sky-500/30 px-3 py-1.5 rounded-full text-xs font-mono font-bold text-sky-300">
+              <Radio className="w-3.5 h-3.5 animate-pulse" />
+              <span>Packets: {connState.packetsReceived}</span>
             </div>
           )}
-
-          {isConnected ? (
-            <button
-              onClick={handleDisconnect}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold text-red-700 dark:text-red-300 bg-red-50 hover:bg-red-100 dark:bg-red-950/40 dark:hover:bg-red-950/80 border border-red-200 dark:border-red-900 transition-colors"
-            >
-              Disconnect
-            </button>
-          ) : (
-            <button
-              onClick={() => handleConnect()}
-              className="px-3 py-1.5 rounded-xl text-xs font-bold text-white bg-[#397FC0] hover:bg-[#2b6ba7] transition-colors shadow-sm"
-            >
-              Connect
-            </button>
-          )}
-
-          <button
-            onClick={() => setIsOpen(!isOpen)}
-            className="p-1.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-neutral-800 transition-colors border border-slate-200 dark:border-neutral-700"
-            title="Configure WebSocket URL"
-          >
-            <Settings2 className="w-4 h-4" />
-          </button>
         </div>
       </div>
 
-      {/* Expandable Configuration Drawer */}
-      {isOpen && (
-        <form
-          onSubmit={handleConnect}
-          className="mt-4 pt-4 border-t border-slate-200 dark:border-neutral-800 flex flex-col sm:flex-row items-stretch sm:items-center gap-2"
-        >
-          <div className="flex-1">
-            <label className="block text-[11px] font-bold uppercase tracking-wider text-[#687583] dark:text-slate-400 mb-1">
-              WebSocket Server URL (e.g. ws://localhost:8080 or wss://relay.onrender.com)
-            </label>
-            <input
-              type="text"
-              value={inputUrl}
-              onChange={(e) => setInputUrl(e.target.value)}
-              placeholder="ws://localhost:8080"
-              className="w-full px-3 py-1.5 rounded-xl text-xs font-mono bg-white dark:bg-[#1D1D1D] border border-slate-300 dark:border-[#303030] text-[#24272D] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#397FC0]"
-            />
-          </div>
-
-          <div className="flex items-end gap-2 pt-2 sm:pt-0">
-            <button
-              type="button"
-              onClick={() => setInputUrl('ws://localhost:8080')}
-              className="px-2.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-neutral-800 hover:bg-slate-200 transition-colors"
-            >
-              Local
-            </button>
-            <button
-              type="submit"
-              className="px-4 py-1.5 rounded-xl text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors shadow-sm"
-            >
-              Save &amp; Connect
-            </button>
-          </div>
-        </form>
-      )}
+      {/* Target status note below */}
+      <div className="mt-2 text-[11px] font-mono text-slate-400 flex items-center justify-between">
+        <span>
+          Target: <strong className="text-slate-200">{connState.url || `ws://${ipAddress || '10.245.210.144'}:81`}</strong>
+        </span>
+        {connState.error && !isConnected && (
+          <span className="text-rose-400">({connState.error})</span>
+        )}
+      </div>
     </div>
   );
 };
